@@ -2044,6 +2044,7 @@ exports.runtime = async (src, env) => {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const encoding_1 = require("./encoding");
+const traverse_1 = require("./traverse");
 const flatten = (arr) => [].concat.apply([], arr);
 // https://webassembly.github.io/spec/core/binary/modules.html#sections
 var Section;
@@ -2074,8 +2075,25 @@ var Opcodes;
     Opcodes[Opcodes["call"] = 16] = "call";
     Opcodes[Opcodes["get_local"] = 32] = "get_local";
     Opcodes[Opcodes["f32_const"] = 67] = "f32_const";
+    Opcodes[Opcodes["f32_eq"] = 91] = "f32_eq";
+    Opcodes[Opcodes["f32_lt"] = 93] = "f32_lt";
+    Opcodes[Opcodes["f32_gt"] = 94] = "f32_gt";
+    Opcodes[Opcodes["i32_and"] = 113] = "i32_and";
     Opcodes[Opcodes["f32_add"] = 146] = "f32_add";
+    Opcodes[Opcodes["f32_sub"] = 147] = "f32_sub";
+    Opcodes[Opcodes["f32_mul"] = 148] = "f32_mul";
+    Opcodes[Opcodes["f32_div"] = 149] = "f32_div";
 })(Opcodes || (Opcodes = {}));
+const binaryOpcode = {
+    "+": Opcodes.f32_add,
+    "-": Opcodes.f32_sub,
+    "*": Opcodes.f32_mul,
+    "/": Opcodes.f32_div,
+    "==": Opcodes.f32_eq,
+    ">": Opcodes.f32_gt,
+    "<": Opcodes.f32_lt,
+    "&&": Opcodes.i32_and
+};
 // http://webassembly.github.io/spec/core/binary/modules.html#export-section
 var ExportType;
 (function (ExportType) {
@@ -2104,14 +2122,17 @@ const createSection = (sectionType, data) => [
 ];
 const codeFromAst = (ast) => {
     const code = [];
-    const emitExpression = (node) => {
+    const emitExpression = (node) => traverse_1.default(node, (node) => {
         switch (node.type) {
             case "numberLiteral":
                 code.push(Opcodes.f32_const);
                 code.push(...encoding_1.ieee754(node.value));
                 break;
+            case "binaryExpression":
+                code.push(binaryOpcode[node.operator]);
+                break;
         }
-    };
+    });
     ast.forEach(statement => {
         switch (statement.type) {
             case "printStatement":
@@ -2167,7 +2188,7 @@ exports.emitter = (ast) => {
     ]);
 };
 
-},{"./encoding":6}],6:[function(require,module,exports){
+},{"./encoding":6,"./traverse":10}],6:[function(require,module,exports){
 (function (Buffer){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
@@ -2215,6 +2236,27 @@ exports.unsignedLEB128 = (n) => {
 Object.defineProperty(exports, "__esModule", { value: true });
 const tokenizer_1 = require("./tokenizer");
 const parser_1 = require("./parser");
+const applyOperator = (operator, left, right) => {
+    switch (operator) {
+        case "+":
+            return left + right;
+        case "-":
+            return left - right;
+        case "*":
+            return left * right;
+        case "/":
+            return left / right;
+        case "==":
+            return left == right ? 1 : 0;
+        case ">":
+            return left > right ? 1 : 0;
+        case "<":
+            return left < right ? 1 : 0;
+        case "&&":
+            return left && right;
+    }
+    throw Error(`Unknown binary operator ${operator}`);
+};
 exports.runtime = async (src, { print }) => () => {
     const tokens = tokenizer_1.tokenize(src);
     const program = parser_1.parse(tokens);
@@ -2222,6 +2264,8 @@ exports.runtime = async (src, { print }) => () => {
         switch (expression.type) {
             case "numberLiteral":
                 return expression.value;
+            case "binaryExpression":
+                return applyOperator(expression.operator, evaluateExpression(expression.left), evaluateExpression(expression.right));
         }
     };
     const executeStatements = (statements) => {
@@ -2246,44 +2290,57 @@ class ParserError extends Error {
     }
 }
 exports.ParserError = ParserError;
+const asOperator = (value) => {
+    // TODO: check it really is an operator
+    return value;
+};
 exports.parse = tokens => {
-    let index = 0;
-    let currentToken = tokens[0];
+    const tokenIterator = tokens[Symbol.iterator]();
+    let currentToken = tokenIterator.next().value;
     const eatToken = (value) => {
         if (value && value !== currentToken.value) {
             throw new ParserError(`Unexpected token value, expected ${value}, received ${currentToken.value}`, currentToken);
         }
-        index++;
-        currentToken = index < tokens.length ? tokens[index] : undefined;
+        currentToken = tokenIterator.next().value;
     };
     const parseExpression = () => {
         let node;
         switch (currentToken.type) {
             case "number":
-                node = { type: "numberLiteral", value: Number(currentToken.value) };
+                node = {
+                    type: "numberLiteral",
+                    value: Number(currentToken.value)
+                };
                 eatToken();
                 return node;
+            case "parens":
+                eatToken("(");
+                const left = parseExpression();
+                const operator = currentToken.value;
+                eatToken();
+                const right = parseExpression();
+                eatToken(")");
+                return {
+                    type: "binaryExpression",
+                    left,
+                    right,
+                    operator: asOperator(operator)
+                };
             default:
                 throw new ParserError(`Unexpected token type ${currentToken.type}`, currentToken);
         }
-    };
-    const parsePrintStatement = () => {
-        eatToken("print");
-        return {
-            type: "printStatement",
-            expression: parseExpression()
-        };
     };
     const parseStatement = () => {
         if (currentToken.type === "keyword") {
             switch (currentToken.value) {
                 case "print":
-                    return parsePrintStatement();
-                default:
-                    throw new ParserError(`Unknown keyword ${currentToken.value}`, currentToken);
+                    eatToken();
+                    return {
+                        type: "printStatement",
+                        expression: parseExpression()
+                    };
             }
         }
-        throw new ParserError(`All statements should start with a keyword ${currentToken}`, currentToken);
     };
     const nodes = [];
     while (currentToken) {
@@ -2296,6 +2353,15 @@ exports.parse = tokens => {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.keywords = ["print"];
+exports.operators = ["+", "-", "*", "/", "==", "<", ">", "&&"];
+const escapeRegEx = (text) => text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+class TokenizerError extends Error {
+    constructor(message, index) {
+        super(message);
+        this.index = index;
+    }
+}
+exports.TokenizerError = TokenizerError;
 // returns a token if the given regex matches at the current index
 const regexMatcher = (regex, type) => (input, index) => {
     const match = input.substring(index).match(regex);
@@ -2304,6 +2370,14 @@ const regexMatcher = (regex, type) => (input, index) => {
         value: match[0]
     });
 };
+// matchers in precedence order
+const matchers = [
+    regexMatcher("^[.0-9]+", "number"),
+    regexMatcher(`^(${exports.keywords.join("|")})`, "keyword"),
+    regexMatcher("^\\s+", "whitespace"),
+    regexMatcher(`^(${exports.operators.map(escapeRegEx).join("|")})`, "operator"),
+    regexMatcher("^[()]{1}", "parens")
+];
 const locationForIndex = (input, index) => ({
     char: index - input.lastIndexOf("\n", index) - 1,
     line: input.substring(0, index).split("\n").length - 1
@@ -2311,25 +2385,45 @@ const locationForIndex = (input, index) => ({
 exports.tokenize = input => {
     const tokens = [];
     let index = 0;
-    // matchers in precedence order
-    const matchers = [
-        regexMatcher("^[.0-9]+", "number"),
-        regexMatcher(`^(${exports.keywords.join("|")})`, "keyword")
-    ];
     while (index < input.length) {
-        const match = matchers.map(m => m(input, index)).find(f => f !== undefined);
-        if (match) {
-            tokens.push(Object.assign({}, match, locationForIndex(input, index)));
+        const matches = matchers.map(m => m(input, index)).filter(f => f);
+        if (matches.length > 0) {
+            // take the highest priority match
+            const match = matches[0];
+            if (match.type !== "whitespace") {
+                tokens.push(Object.assign({}, match, locationForIndex(input, index)));
+            }
             index += match.value.length;
         }
         else {
-            index++;
+            throw new TokenizerError(`Unexpected token ${input.substring(index, index + 1)}`, index);
         }
     }
     return tokens;
 };
 
 },{}],10:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+// post order ast walker
+const traverse = (nodes, visitor) => {
+    nodes = Array.isArray(nodes) ? nodes : [nodes];
+    nodes.forEach(node => {
+        Object.keys(node).forEach((prop) => {
+            const value = node[prop];
+            const valueAsArray = Array.isArray(value) ? value : [value];
+            valueAsArray.forEach((childNode) => {
+                if (typeof childNode.type === "string") {
+                    traverse(childNode, visitor);
+                }
+            });
+        });
+        visitor(node);
+    });
+};
+exports.default = traverse;
+
+},{}],11:[function(require,module,exports){
 const interpreterRuntime = require("../src/interpreter").runtime;
 const compilerRuntime = require("../src/compiler").runtime;
 const { keywords, operators } = require("../src/tokenizer");
@@ -2360,7 +2454,7 @@ const sleep = async (ms) => await new Promise(resolve => setTimeout(resolve, ms)
 let marker;
 const logMessage = (message) => (outputArea.value = outputArea.value + message + "\n");
 const markError = (token) => {
-    marker = editor.markText({ line: token.line, ch: token.char - 1 }, { line: token.line, ch: token.char - 1 + token.value.length }, { className: "error" });
+    marker = editor.markText({ line: token.line, ch: token.char }, { line: token.line, ch: token.char + token.value.length }, { className: "error" });
 };
 const run = async (runtime) => {
     if (marker) {
@@ -2393,4 +2487,4 @@ compileButton.addEventListener("click", async () => {
     await run(compilerRuntime);
 });
 
-},{"../src/compiler":4,"../src/interpreter":7,"../src/tokenizer":9}]},{},[10]);
+},{"../src/compiler":4,"../src/interpreter":7,"../src/tokenizer":9}]},{},[11]);

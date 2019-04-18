@@ -40,8 +40,8 @@ const logMessage = (message: string | number) =>
 
 const markError = (token: Token) => {
   marker = editor.markText(
-    { line: token.line, ch: token.char - 1 },
-    { line: token.line, ch: token.char - 1 + token.value.length },
+    { line: token.line, ch: token.char },
+    { line: token.line, ch: token.char + token.value.length },
     { className: "error" }
   );
 };

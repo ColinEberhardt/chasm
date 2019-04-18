@@ -6,9 +6,10 @@ interface ProgramNode {
   type: string;
 }
 
-// in future we will have multiple expression types, for now
-// just number literals
-type ExpressionNode = NumberLiteralNode;
+type Operator = "+" | "-" | "/" | "*" | "==" | ">" | "<" | "&&";
+
+// in future we will have multiple expression types
+type ExpressionNode = NumberLiteralNode | BinaryExpressionNode;
 
 // in future we will have multiple statement types, for now
 // just print statements
@@ -19,6 +20,13 @@ type Program = StatementNode[];
 interface NumberLiteralNode extends ProgramNode {
   type: "numberLiteral";
   value: number;
+}
+
+interface BinaryExpressionNode extends ProgramNode {
+  type: "binaryExpression";
+  left: ExpressionNode;
+  right: ExpressionNode;
+  operator: Operator;
 }
 
 interface IdentifierNode extends ProgramNode {
