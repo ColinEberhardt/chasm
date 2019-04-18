@@ -30,6 +30,7 @@ enum Opcodes {
   end = 0x0b,
   call = 0x10,
   get_local = 0x20,
+  set_local = 0x21,
   f32_const = 0x43,
   f32_eq = 0x5b,
   f32_lt = 0x5d,
@@ -76,6 +77,12 @@ const encodeVector = (data: any[]) => [
   ...flatten(data)
 ];
 
+// https://webassembly.github.io/spec/core/binary/modules.html#code-section
+const encodeLocal = (count: number, type: Valtype) => [
+  unsignedLEB128(count),
+  type
+];
+
 // https://webassembly.github.io/spec/core/binary/modules.html#sections
 // sections are encoded by their type followed by their vector contents
 const createSection = (sectionType: Section, data: any[]) => [
@@ -86,12 +93,25 @@ const createSection = (sectionType: Section, data: any[]) => [
 const codeFromAst = (ast: Program) => {
   const code: number[] = [];
 
+  const symbols = new Map<string, number>();
+
+  const localIndexForSymbol = (name: string) => {
+    if (!symbols.has(name)) {
+      symbols.set(name, symbols.size);
+    }
+    return symbols.get(name);
+  };
+
   const emitExpression = (node: ExpressionNode) =>
     traverse(node, (node: ExpressionNode) => {
       switch (node.type) {
         case "numberLiteral":
           code.push(Opcodes.f32_const);
           code.push(...ieee754(node.value));
+          break;
+        case "identifier":
+          code.push(Opcodes.get_local);
+          code.push(...unsignedLEB128(localIndexForSymbol(node.value)));
           break;
         case "binaryExpression":
           code.push(binaryOpcode[node.operator]);
@@ -106,10 +126,15 @@ const codeFromAst = (ast: Program) => {
         code.push(Opcodes.call);
         code.push(...unsignedLEB128(0));
         break;
+      case "variableDeclaration":
+        emitExpression(statement.initializer);
+        code.push(Opcodes.set_local);
+        code.push(...unsignedLEB128(localIndexForSymbol(statement.name)));
+        break;
     }
   });
 
-  return code;
+  return { code, localCount: symbols.size };
 };
 
 export const emitter: Emitter = (ast: Program) => {
@@ -158,9 +183,13 @@ export const emitter: Emitter = (ast: Program) => {
   );
 
   // the code section contains vectors of functions
+  const { code, localCount } = codeFromAst(ast);
+
+  const locals = localCount > 0 ? [encodeLocal(localCount, Valtype.f32)] : [];
+
   const functionBody = encodeVector([
-    emptyArray /** locals */,
-    ...codeFromAst(ast),
+    ...encodeVector(locals),
+    ...code,
     Opcodes.end
   ]);
 

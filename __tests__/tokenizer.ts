@@ -22,9 +22,9 @@ describe("tokenize", () => {
 
   test("barfs on unrecognized token", () => {
     expect(() => {
-      const input = " print foo   print";
+      const input = " print $   print";
       tokenize(input);
-    }).toThrowError("Unexpected token f");
+    }).toThrowError("Unexpected token $");
   });
 
   test("copes with multiple mixed tokens", () => {

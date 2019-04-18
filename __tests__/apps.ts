@@ -15,6 +15,16 @@ const apps = [
     name: "nested binary expressions",
     input: "print ((6-4)+10)",
     output: [12]
+  },
+  {
+    name: "variable declaration",
+    input: "var f = 22 print f",
+    output: [22]
+  },
+  {
+    name: "floating point variable declaration",
+    input: "var f = 22.5 print f",
+    output: [22.5]
   }
 ];
 

@@ -2074,6 +2074,7 @@ var Opcodes;
     Opcodes[Opcodes["end"] = 11] = "end";
     Opcodes[Opcodes["call"] = 16] = "call";
     Opcodes[Opcodes["get_local"] = 32] = "get_local";
+    Opcodes[Opcodes["set_local"] = 33] = "set_local";
     Opcodes[Opcodes["f32_const"] = 67] = "f32_const";
     Opcodes[Opcodes["f32_eq"] = 91] = "f32_eq";
     Opcodes[Opcodes["f32_lt"] = 93] = "f32_lt";
@@ -2114,6 +2115,11 @@ const encodeVector = (data) => [
     encoding_1.unsignedLEB128(data.length),
     ...flatten(data)
 ];
+// https://webassembly.github.io/spec/core/binary/modules.html#code-section
+const encodeLocal = (count, type) => [
+    encoding_1.unsignedLEB128(count),
+    type
+];
 // https://webassembly.github.io/spec/core/binary/modules.html#sections
 // sections are encoded by their type followed by their vector contents
 const createSection = (sectionType, data) => [
@@ -2122,11 +2128,22 @@ const createSection = (sectionType, data) => [
 ];
 const codeFromAst = (ast) => {
     const code = [];
+    const symbols = new Map();
+    const localIndexForSymbol = (name) => {
+        if (!symbols.has(name)) {
+            symbols.set(name, symbols.size);
+        }
+        return symbols.get(name);
+    };
     const emitExpression = (node) => traverse_1.default(node, (node) => {
         switch (node.type) {
             case "numberLiteral":
                 code.push(Opcodes.f32_const);
                 code.push(...encoding_1.ieee754(node.value));
+                break;
+            case "identifier":
+                code.push(Opcodes.get_local);
+                code.push(...encoding_1.unsignedLEB128(localIndexForSymbol(node.value)));
                 break;
             case "binaryExpression":
                 code.push(binaryOpcode[node.operator]);
@@ -2140,9 +2157,14 @@ const codeFromAst = (ast) => {
                 code.push(Opcodes.call);
                 code.push(...encoding_1.unsignedLEB128(0));
                 break;
+            case "variableDeclaration":
+                emitExpression(statement.initializer);
+                code.push(Opcodes.set_local);
+                code.push(...encoding_1.unsignedLEB128(localIndexForSymbol(statement.name)));
+                break;
         }
     });
-    return code;
+    return { code, localCount: symbols.size };
 };
 exports.emitter = (ast) => {
     // Function types are vectors of parameters and return types. Currently
@@ -2171,9 +2193,11 @@ exports.emitter = (ast) => {
         [...encoding_1.encodeString("run"), ExportType.func, 0x01 /* function index */]
     ]));
     // the code section contains vectors of functions
+    const { code, localCount } = codeFromAst(ast);
+    const locals = localCount > 0 ? [encodeLocal(localCount, Valtype.f32)] : [];
     const functionBody = encodeVector([
-        emptyArray /** locals */,
-        ...codeFromAst(ast),
+        ...encodeVector(locals),
+        ...code,
         Opcodes.end
     ]);
     const codeSection = createSection(Section.code, encodeVector([functionBody]));
@@ -2260,12 +2284,15 @@ const applyOperator = (operator, left, right) => {
 exports.runtime = async (src, { print }) => () => {
     const tokens = tokenizer_1.tokenize(src);
     const program = parser_1.parse(tokens);
+    const symbols = new Map();
     const evaluateExpression = (expression) => {
         switch (expression.type) {
             case "numberLiteral":
                 return expression.value;
             case "binaryExpression":
                 return applyOperator(expression.operator, evaluateExpression(expression.left), evaluateExpression(expression.right));
+            case "identifier":
+                return symbols.get(expression.value);
         }
     };
     const executeStatements = (statements) => {
@@ -2273,6 +2300,9 @@ exports.runtime = async (src, { print }) => () => {
             switch (statement.type) {
                 case "printStatement":
                     print(evaluateExpression(statement.expression));
+                    break;
+                case "variableDeclaration":
+                    symbols.set(statement.name, evaluateExpression(statement.initializer));
                     break;
             }
         });
@@ -2313,6 +2343,10 @@ exports.parse = tokens => {
                 };
                 eatToken();
                 return node;
+            case "identifier":
+                node = { type: "identifier", value: currentToken.value };
+                eatToken();
+                return node;
             case "parens":
                 eatToken("(");
                 const left = parseExpression();
@@ -2330,15 +2364,33 @@ exports.parse = tokens => {
                 throw new ParserError(`Unexpected token type ${currentToken.type}`, currentToken);
         }
     };
+    const parsePrintStatement = () => {
+        eatToken("print");
+        return {
+            type: "printStatement",
+            expression: parseExpression()
+        };
+    };
+    const parseVariableDeclarationStatement = () => {
+        eatToken("var");
+        const name = currentToken.value;
+        eatToken();
+        eatToken("=");
+        return {
+            type: "variableDeclaration",
+            name,
+            initializer: parseExpression()
+        };
+    };
     const parseStatement = () => {
         if (currentToken.type === "keyword") {
             switch (currentToken.value) {
                 case "print":
-                    eatToken();
-                    return {
-                        type: "printStatement",
-                        expression: parseExpression()
-                    };
+                    return parsePrintStatement();
+                case "var":
+                    return parseVariableDeclarationStatement();
+                default:
+                    throw new ParserError(`Unknown keyword ${currentToken.value}`, currentToken);
             }
         }
     };
@@ -2352,7 +2404,7 @@ exports.parse = tokens => {
 },{}],9:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.keywords = ["print"];
+exports.keywords = ["print", "var"];
 exports.operators = ["+", "-", "*", "/", "==", "<", ">", "&&"];
 const escapeRegEx = (text) => text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
 class TokenizerError extends Error {
@@ -2376,6 +2428,8 @@ const matchers = [
     regexMatcher(`^(${exports.keywords.join("|")})`, "keyword"),
     regexMatcher("^\\s+", "whitespace"),
     regexMatcher(`^(${exports.operators.map(escapeRegEx).join("|")})`, "operator"),
+    regexMatcher(`^[a-z]`, "identifier"),
+    regexMatcher(`^=`, "assignment"),
     regexMatcher("^[()]{1}", "parens")
 ];
 const locationForIndex = (input, index) => ({

@@ -8,18 +8,26 @@ interface ProgramNode {
 
 type Operator = "+" | "-" | "/" | "*" | "==" | ">" | "<" | "&&";
 
-// in future we will have multiple expression types
-type ExpressionNode = NumberLiteralNode | BinaryExpressionNode;
+type ExpressionNode = NumberLiteralNode | BinaryExpressionNode | IdentifierNode;
 
-// in future we will have multiple statement types, for now
-// just print statements
-type StatementNode = PrintStatementNode;
+type StatementNode = PrintStatementNode | VariableDeclarationNode;
 
 type Program = StatementNode[];
+
+interface VariableDeclarationNode extends ProgramNode {
+  type: "variableDeclaration";
+  name: string;
+  initializer: ExpressionNode;
+}
 
 interface NumberLiteralNode extends ProgramNode {
   type: "numberLiteral";
   value: number;
+}
+
+interface IdentifierNode extends ProgramNode {
+  type: "identifier";
+  value: string;
 }
 
 interface BinaryExpressionNode extends ProgramNode {

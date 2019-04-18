@@ -27,6 +27,8 @@ export const runtime: Runtime = async (src, { print }) => () => {
   const tokens = tokenize(src);
   const program = parse(tokens);
 
+  const symbols = new Map();
+
   const evaluateExpression = (expression: ExpressionNode): number => {
     switch (expression.type) {
       case "numberLiteral":
@@ -37,6 +39,8 @@ export const runtime: Runtime = async (src, { print }) => () => {
           evaluateExpression(expression.left),
           evaluateExpression(expression.right)
         );
+      case "identifier":
+        return symbols.get(expression.value);
     }
   };
 
@@ -45,6 +49,12 @@ export const runtime: Runtime = async (src, { print }) => () => {
       switch (statement.type) {
         case "printStatement":
           print(evaluateExpression(statement.expression));
+          break;
+        case "variableDeclaration":
+          symbols.set(
+            statement.name,
+            evaluateExpression(statement.initializer)
+          );
           break;
       }
     });

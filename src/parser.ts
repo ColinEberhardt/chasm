@@ -37,6 +37,10 @@ export const parse: Parser = tokens => {
         };
         eatToken();
         return node;
+      case "identifier":
+        node = { type: "identifier", value: currentToken.value };
+        eatToken();
+        return node;
       case "parens":
         eatToken("(");
         const left = parseExpression();
@@ -58,15 +62,40 @@ export const parse: Parser = tokens => {
     }
   };
 
+  const parsePrintStatement: ParserStep<PrintStatementNode> = () => {
+    eatToken("print");
+    return {
+      type: "printStatement",
+      expression: parseExpression()
+    };
+  };
+
+  const parseVariableDeclarationStatement: ParserStep<
+    VariableDeclarationNode
+  > = () => {
+    eatToken("var");
+    const name = currentToken.value;
+    eatToken();
+    eatToken("=");
+    return {
+      type: "variableDeclaration",
+      name,
+      initializer: parseExpression()
+    };
+  };
+
   const parseStatement: ParserStep<StatementNode> = () => {
     if (currentToken.type === "keyword") {
       switch (currentToken.value) {
         case "print":
-          eatToken();
-          return {
-            type: "printStatement",
-            expression: parseExpression()
-          };
+          return parsePrintStatement();
+        case "var":
+          return parseVariableDeclarationStatement();
+        default:
+          throw new ParserError(
+            `Unknown keyword ${currentToken.value}`,
+            currentToken
+          );
       }
     }
   };
