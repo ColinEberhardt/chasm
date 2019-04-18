@@ -1,0 +1,67 @@
+<html>
+  <head>
+    <link
+      rel="stylesheet"
+      href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
+      integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T"
+      crossorigin="anonymous"
+    />
+    <style>
+      canvas {
+        display: block;
+        border: 1px solid gray;
+      }
+      nav .btn {
+        margin-right: 10px;
+      }
+      textarea {
+        font-family: monospace;
+      }
+      .CodeMirror,
+      textarea {
+        height: 400px !important;
+      }
+      .error {
+        border-color: red;
+        border-style: dotted;
+        border-width: 2px;
+      }
+    </style>
+    <script src="https://unpkg.com/codemirror@5.45.0/lib/codemirror.js"></script>
+    <script src="https://unpkg.com/codemirror@5.45.0/addon/mode/simple.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/codemirror@5.45.0/theme/abcdef.css" />
+    <link rel="stylesheet" href="https://unpkg.com/codemirror@5.45.0/lib/codemirror.css" />
+  </head>
+  <body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+      <button id="interpret" class="btn btn-outline-success">
+        Run (interpreter)
+      </button>
+      <button id="compile" class="btn btn-outline-success">
+        Run (compiler)
+      </button>
+    </nav>
+
+    <div class="container-fluid">
+      <div class="row">
+        <div class="col-md-5">
+          <b>Code</b>
+          <textarea rows="20" class="form-control" id="code" wrap="off">
+print 42
+    </textarea
+          >
+        </div>
+        <div class="col-md-5">
+          <b>Console output</b>
+          <textarea
+            rows="20"
+            id="output"
+            class="form-control"
+            wrap="off"
+          ></textarea>
+        </div>
+      </div>
+    </div>
+    <script src="bundle.js"></script>
+  </body>
+</html>

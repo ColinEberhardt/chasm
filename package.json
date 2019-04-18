@@ -8,11 +8,17 @@
     "@types/jest": "^24.0.11",
     "@types/node": "^11.13.4",
     "@types/webassembly-js-api": "^0.0.3",
+    "browserify": "^16.2.3",
     "jest": "^24.7.1",
     "ts-jest": "^24.0.2",
+    "tsify": "^4.0.1",
     "typescript": "^3.4.3"
   },
   "scripts": {
-    "test": "jest"
+    "test": "yarn run test:tsc && yarn run test:jest",
+    "test:tsc": "tsc --noEmit",
+    "test:jest": "jest",
+    "test:watch": "jest --watch",
+    "bundle": "browserify web/index.ts -p [ tsify ] > web/bundle.js"
   }
 }
