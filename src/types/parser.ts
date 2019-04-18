@@ -10,7 +10,11 @@ type Operator = "+" | "-" | "/" | "*" | "==" | ">" | "<" | "&&";
 
 type ExpressionNode = NumberLiteralNode | BinaryExpressionNode | IdentifierNode;
 
-type StatementNode = PrintStatementNode | VariableDeclarationNode;
+type StatementNode =
+  | PrintStatementNode
+  | VariableDeclarationNode
+  | VariableAssignmentNode
+  | WhileStatementNode;
 
 type Program = StatementNode[];
 
@@ -18,6 +22,12 @@ interface VariableDeclarationNode extends ProgramNode {
   type: "variableDeclaration";
   name: string;
   initializer: ExpressionNode;
+}
+
+interface VariableAssignmentNode extends ProgramNode {
+  type: "variableAssignment";
+  name: string;
+  value: ExpressionNode;
 }
 
 interface NumberLiteralNode extends ProgramNode {
@@ -45,6 +55,12 @@ interface IdentifierNode extends ProgramNode {
 interface PrintStatementNode extends ProgramNode {
   type: "printStatement";
   expression: ExpressionNode;
+}
+
+interface WhileStatementNode extends ProgramNode {
+  type: "whileStatement";
+  expression: ExpressionNode;
+  statements: StatementNode[];
 }
 
 interface ParserStep<T extends ProgramNode> {

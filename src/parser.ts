@@ -15,6 +15,9 @@ export const parse: Parser = tokens => {
   const tokenIterator = tokens[Symbol.iterator]();
   let currentToken = tokenIterator.next().value;
 
+  const currentTokenIsKeyword = (name: string) =>
+    currentToken.value === name && currentToken.type === "keyword";
+
   const eatToken = (value?: string) => {
     if (value && value !== currentToken.value) {
       throw new ParserError(
@@ -70,6 +73,28 @@ export const parse: Parser = tokens => {
     };
   };
 
+  const parseWhileStatement: ParserStep<WhileStatementNode> = () => {
+    eatToken("while");
+
+    const expression = parseExpression();
+
+    const statements: StatementNode[] = [];
+    while (!currentTokenIsKeyword("endwhile")) {
+      statements.push(parseStatement());
+    }
+
+    eatToken("endwhile");
+
+    return { type: "whileStatement", expression, statements };
+  };
+
+  const parseVariableAssignment: ParserStep<VariableAssignmentNode> = () => {
+    const name = currentToken.value;
+    eatToken();
+    eatToken("=");
+    return { type: "variableAssignment", name, value: parseExpression() };
+  };
+
   const parseVariableDeclarationStatement: ParserStep<
     VariableDeclarationNode
   > = () => {
@@ -91,12 +116,16 @@ export const parse: Parser = tokens => {
           return parsePrintStatement();
         case "var":
           return parseVariableDeclarationStatement();
+        case "while":
+          return parseWhileStatement();
         default:
           throw new ParserError(
             `Unknown keyword ${currentToken.value}`,
             currentToken
           );
       }
+    } else if (currentToken.type === "identifier") {
+      return parseVariableAssignment();
     }
   };
 

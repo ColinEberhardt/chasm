@@ -2068,14 +2068,24 @@ var Valtype;
     Valtype[Valtype["i32"] = 127] = "i32";
     Valtype[Valtype["f32"] = 125] = "f32";
 })(Valtype || (Valtype = {}));
+// https://webassembly.github.io/spec/core/binary/types.html#binary-blocktype
+var Blocktype;
+(function (Blocktype) {
+    Blocktype[Blocktype["void"] = 64] = "void";
+})(Blocktype || (Blocktype = {}));
 // https://webassembly.github.io/spec/core/binary/instructions.html
 var Opcodes;
 (function (Opcodes) {
+    Opcodes[Opcodes["block"] = 2] = "block";
+    Opcodes[Opcodes["loop"] = 3] = "loop";
+    Opcodes[Opcodes["br"] = 12] = "br";
+    Opcodes[Opcodes["br_if"] = 13] = "br_if";
     Opcodes[Opcodes["end"] = 11] = "end";
     Opcodes[Opcodes["call"] = 16] = "call";
     Opcodes[Opcodes["get_local"] = 32] = "get_local";
     Opcodes[Opcodes["set_local"] = 33] = "set_local";
     Opcodes[Opcodes["f32_const"] = 67] = "f32_const";
+    Opcodes[Opcodes["i32_eqz"] = 69] = "i32_eqz";
     Opcodes[Opcodes["f32_eq"] = 91] = "f32_eq";
     Opcodes[Opcodes["f32_lt"] = 93] = "f32_lt";
     Opcodes[Opcodes["f32_gt"] = 94] = "f32_gt";
@@ -2150,7 +2160,7 @@ const codeFromAst = (ast) => {
                 break;
         }
     });
-    ast.forEach(statement => {
+    const emitStatements = (statements) => statements.forEach(statement => {
         switch (statement.type) {
             case "printStatement":
                 emitExpression(statement.expression);
@@ -2162,8 +2172,37 @@ const codeFromAst = (ast) => {
                 code.push(Opcodes.set_local);
                 code.push(...encoding_1.unsignedLEB128(localIndexForSymbol(statement.name)));
                 break;
+            case "variableAssignment":
+                emitExpression(statement.value);
+                code.push(Opcodes.set_local);
+                code.push(...encoding_1.unsignedLEB128(localIndexForSymbol(statement.name)));
+                break;
+            case "whileStatement":
+                // outer block
+                code.push(Opcodes.block);
+                code.push(Blocktype.void);
+                // inner loop
+                code.push(Opcodes.loop);
+                code.push(Blocktype.void);
+                // compute the while expression
+                emitExpression(statement.expression);
+                code.push(Opcodes.i32_eqz);
+                // br_if $label0
+                code.push(Opcodes.br_if);
+                code.push(...encoding_1.signedLEB128(1));
+                // the nested logic
+                emitStatements(statement.statements);
+                // br $label1
+                code.push(Opcodes.br);
+                code.push(...encoding_1.signedLEB128(0));
+                // end loop
+                code.push(Opcodes.end);
+                // end block
+                code.push(Opcodes.end);
+                break;
         }
     });
+    emitStatements(ast);
     return { code, localCount: symbols.size };
 };
 exports.emitter = (ast) => {
@@ -2304,6 +2343,14 @@ exports.runtime = async (src, { print }) => () => {
                 case "variableDeclaration":
                     symbols.set(statement.name, evaluateExpression(statement.initializer));
                     break;
+                case "variableAssignment":
+                    symbols.set(statement.name, evaluateExpression(statement.value));
+                    break;
+                case "whileStatement":
+                    while (evaluateExpression(statement.expression)) {
+                        executeStatements(statement.statements);
+                    }
+                    break;
             }
         });
     };
@@ -2327,6 +2374,7 @@ const asOperator = (value) => {
 exports.parse = tokens => {
     const tokenIterator = tokens[Symbol.iterator]();
     let currentToken = tokenIterator.next().value;
+    const currentTokenIsKeyword = (name) => currentToken.value === name && currentToken.type === "keyword";
     const eatToken = (value) => {
         if (value && value !== currentToken.value) {
             throw new ParserError(`Unexpected token value, expected ${value}, received ${currentToken.value}`, currentToken);
@@ -2371,6 +2419,22 @@ exports.parse = tokens => {
             expression: parseExpression()
         };
     };
+    const parseWhileStatement = () => {
+        eatToken("while");
+        const expression = parseExpression();
+        const statements = [];
+        while (!currentTokenIsKeyword("endwhile")) {
+            statements.push(parseStatement());
+        }
+        eatToken("endwhile");
+        return { type: "whileStatement", expression, statements };
+    };
+    const parseVariableAssignment = () => {
+        const name = currentToken.value;
+        eatToken();
+        eatToken("=");
+        return { type: "variableAssignment", name, value: parseExpression() };
+    };
     const parseVariableDeclarationStatement = () => {
         eatToken("var");
         const name = currentToken.value;
@@ -2389,9 +2453,14 @@ exports.parse = tokens => {
                     return parsePrintStatement();
                 case "var":
                     return parseVariableDeclarationStatement();
+                case "while":
+                    return parseWhileStatement();
                 default:
                     throw new ParserError(`Unknown keyword ${currentToken.value}`, currentToken);
             }
+        }
+        else if (currentToken.type === "identifier") {
+            return parseVariableAssignment();
         }
     };
     const nodes = [];
@@ -2404,7 +2473,7 @@ exports.parse = tokens => {
 },{}],9:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.keywords = ["print", "var"];
+exports.keywords = ["print", "var", "while", "endwhile"];
 exports.operators = ["+", "-", "*", "/", "==", "<", ">", "&&"];
 const escapeRegEx = (text) => text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
 class TokenizerError extends Error {
