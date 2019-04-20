@@ -2032,11 +2032,13 @@ exports.compile = src => {
 };
 exports.runtime = async (src, env) => {
     const wasm = exports.compile(src);
+    const memory = new WebAssembly.Memory({ initial: 1 });
     const result = await WebAssembly.instantiate(wasm, {
-        env
+        env: Object.assign({}, env, { memory })
     });
     return () => {
         result.instance.exports.run();
+        env.display.set(new Uint8Array(memory.buffer, 0, 10000));
     };
 };
 
@@ -2084,6 +2086,7 @@ var Opcodes;
     Opcodes[Opcodes["call"] = 16] = "call";
     Opcodes[Opcodes["get_local"] = 32] = "get_local";
     Opcodes[Opcodes["set_local"] = 33] = "set_local";
+    Opcodes[Opcodes["i32_store_8"] = 58] = "i32_store_8";
     Opcodes[Opcodes["f32_const"] = 67] = "f32_const";
     Opcodes[Opcodes["i32_eqz"] = 69] = "i32_eqz";
     Opcodes[Opcodes["f32_eq"] = 91] = "f32_eq";
@@ -2094,6 +2097,7 @@ var Opcodes;
     Opcodes[Opcodes["f32_sub"] = 147] = "f32_sub";
     Opcodes[Opcodes["f32_mul"] = 148] = "f32_mul";
     Opcodes[Opcodes["f32_div"] = 149] = "f32_div";
+    Opcodes[Opcodes["i32_trunc_f32_s"] = 168] = "i32_trunc_f32_s";
 })(Opcodes || (Opcodes = {}));
 const binaryOpcode = {
     "+": Opcodes.f32_add,
@@ -2122,12 +2126,12 @@ const moduleVersion = [0x01, 0x00, 0x00, 0x00];
 // https://webassembly.github.io/spec/core/binary/conventions.html#binary-vec
 // Vectors are encoded with their length followed by their element sequence
 const encodeVector = (data) => [
-    encoding_1.unsignedLEB128(data.length),
+    ...encoding_1.unsignedLEB128(data.length),
     ...flatten(data)
 ];
 // https://webassembly.github.io/spec/core/binary/modules.html#code-section
 const encodeLocal = (count, type) => [
-    encoding_1.unsignedLEB128(count),
+    ...encoding_1.unsignedLEB128(count),
     type
 ];
 // https://webassembly.github.io/spec/core/binary/modules.html#sections
@@ -2200,6 +2204,36 @@ const codeFromAst = (ast) => {
                 // end block
                 code.push(Opcodes.end);
                 break;
+            case "setpixelStatement":
+                // compute and cache the setpixel parameters
+                emitExpression(statement.x);
+                code.push(Opcodes.set_local);
+                code.push(...encoding_1.unsignedLEB128(localIndexForSymbol("x")));
+                emitExpression(statement.y);
+                code.push(Opcodes.set_local);
+                code.push(...encoding_1.unsignedLEB128(localIndexForSymbol("y")));
+                emitExpression(statement.color);
+                code.push(Opcodes.set_local);
+                code.push(...encoding_1.unsignedLEB128(localIndexForSymbol("color")));
+                // compute the offset (x * 100) + y
+                code.push(Opcodes.get_local);
+                code.push(...encoding_1.unsignedLEB128(localIndexForSymbol("y")));
+                code.push(Opcodes.f32_const);
+                code.push(...encoding_1.ieee754(100));
+                code.push(Opcodes.f32_mul);
+                code.push(Opcodes.get_local);
+                code.push(...encoding_1.unsignedLEB128(localIndexForSymbol("x")));
+                code.push(Opcodes.f32_add);
+                // convert to an integer
+                code.push(Opcodes.i32_trunc_f32_s);
+                // fetch the color
+                code.push(Opcodes.get_local);
+                code.push(...encoding_1.unsignedLEB128(localIndexForSymbol("color")));
+                code.push(Opcodes.i32_trunc_f32_s);
+                // write
+                code.push(Opcodes.i32_store_8);
+                code.push(...[0x00, 0x00]); // align and offset
+                break;
         }
     });
     emitStatements(ast);
@@ -2226,7 +2260,16 @@ exports.emitter = (ast) => {
         ExportType.func,
         0x01 // type index
     ];
-    const importSection = createSection(Section.import, encodeVector([printFunctionImport]));
+    const memoryImport = [
+        ...encoding_1.encodeString("env"),
+        ...encoding_1.encodeString("memory"),
+        ExportType.mem,
+        /* limits https://webassembly.github.io/spec/core/binary/types.html#limits -
+          indicates a min memory size of one page */
+        0x00,
+        0x01
+    ];
+    const importSection = createSection(Section.import, encodeVector([printFunctionImport, memoryImport]));
     // the export section is a vector of exported functions
     const exportSection = createSection(Section.export, encodeVector([
         [...encoding_1.encodeString("run"), ExportType.func, 0x01 /* function index */]
@@ -2320,7 +2363,7 @@ const applyOperator = (operator, left, right) => {
     }
     throw Error(`Unknown binary operator ${operator}`);
 };
-exports.runtime = async (src, { print }) => () => {
+exports.runtime = async (src, { print, display }) => () => {
     const tokens = tokenizer_1.tokenize(src);
     const program = parser_1.parse(tokens);
     const symbols = new Map();
@@ -2350,6 +2393,12 @@ exports.runtime = async (src, { print }) => () => {
                     while (evaluateExpression(statement.expression)) {
                         executeStatements(statement.statements);
                     }
+                    break;
+                case "setpixelStatement":
+                    const x = evaluateExpression(statement.x);
+                    const y = evaluateExpression(statement.y);
+                    const color = evaluateExpression(statement.color);
+                    display[y * 100 + x] = color;
                     break;
             }
         });
@@ -2446,6 +2495,15 @@ exports.parse = tokens => {
             initializer: parseExpression()
         };
     };
+    const parseSetPixelStatement = () => {
+        eatToken("setpixel");
+        return {
+            type: "setpixelStatement",
+            x: parseExpression(),
+            y: parseExpression(),
+            color: parseExpression()
+        };
+    };
     const parseStatement = () => {
         if (currentToken.type === "keyword") {
             switch (currentToken.value) {
@@ -2455,6 +2513,8 @@ exports.parse = tokens => {
                     return parseVariableDeclarationStatement();
                 case "while":
                     return parseWhileStatement();
+                case "setpixel":
+                    return parseSetPixelStatement();
                 default:
                     throw new ParserError(`Unknown keyword ${currentToken.value}`, currentToken);
             }
@@ -2473,7 +2533,7 @@ exports.parse = tokens => {
 },{}],9:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.keywords = ["print", "var", "while", "endwhile"];
+exports.keywords = ["print", "var", "while", "endwhile", "setpixel"];
 exports.operators = ["+", "-", "*", "/", "==", "<", ">", "&&"];
 const escapeRegEx = (text) => text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
 class TokenizerError extends Error {
@@ -2554,6 +2614,26 @@ const compileButton = document.getElementById("compile");
 const interpretButton = document.getElementById("interpret");
 const codeArea = document.getElementById("code");
 const outputArea = document.getElementById("output");
+const canvas = document.getElementById("canvas");
+// quick and dirty image data scaling
+// see: https://stackoverflow.com/questions/3448347/how-to-scale-an-imagedata-in-html-canvas
+const scaleImageData = (imageData, scale, ctx) => {
+    const scaled = ctx.createImageData(imageData.width * scale, imageData.height * scale);
+    const subLine = ctx.createImageData(scale, 1).data;
+    for (let row = 0; row < imageData.height; row++) {
+        for (let col = 0; col < imageData.width; col++) {
+            const sourcePixel = imageData.data.subarray((row * imageData.width + col) * 4, (row * imageData.width + col) * 4 + 4);
+            for (let x = 0; x < scale; x++)
+                subLine.set(sourcePixel, x * 4);
+            for (let y = 0; y < scale; y++) {
+                const destRow = row * scale + y;
+                const destCol = col * scale;
+                scaled.data.set(subLine, (destRow * scaled.width + destCol) * 4);
+            }
+        }
+    }
+    return scaled;
+};
 CodeMirror.defineSimpleMode("simplemode", {
     start: [
         {
@@ -2579,6 +2659,18 @@ const logMessage = (message) => (outputArea.value = outputArea.value + message +
 const markError = (token) => {
     marker = editor.markText({ line: token.line, ch: token.char }, { line: token.line, ch: token.char + token.value.length }, { className: "error" });
 };
+const updateCanvas = (display) => {
+    const context = canvas.getContext("2d");
+    const imgData = context.createImageData(100, 100);
+    for (let i = 0; i < 100 * 100; i++) {
+        imgData.data[i * 4] = display[i];
+        imgData.data[i * 4 + 1] = display[i];
+        imgData.data[i * 4 + 2] = display[i];
+        imgData.data[i * 4 + 3] = 255;
+    }
+    const data = scaleImageData(imgData, 3, context);
+    context.putImageData(data, 0, 0);
+};
 const run = async (runtime) => {
     if (marker) {
         marker.clear();
@@ -2586,13 +2678,17 @@ const run = async (runtime) => {
     await sleep(10);
     let tickFunction;
     try {
+        const display = new Uint8Array(10000);
         tickFunction = await runtime(editor.getValue(), {
-            print: logMessage
+            print: logMessage,
+            display
         });
         outputArea.value = "";
         logMessage(`Executing ... `);
         tickFunction();
+        updateCanvas(display);
         interpretButton.classList.remove("active");
+        compileButton.classList.remove("active");
     }
     catch (error) {
         logMessage(error.message);

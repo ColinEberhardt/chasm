@@ -23,7 +23,7 @@ const applyOperator = (operator: string, left: number, right: number) => {
   throw Error(`Unknown binary operator ${operator}`);
 };
 
-export const runtime: Runtime = async (src, { print }) => () => {
+export const runtime: Runtime = async (src, { print, display }) => () => {
   const tokens = tokenize(src);
   const program = parse(tokens);
 
@@ -63,6 +63,12 @@ export const runtime: Runtime = async (src, { print }) => () => {
           while (evaluateExpression(statement.expression)) {
             executeStatements(statement.statements);
           }
+          break;
+        case "setpixelStatement":
+          const x = evaluateExpression(statement.x);
+          const y = evaluateExpression(statement.y);
+          const color = evaluateExpression(statement.color);
+          display[y * 100 + x] = color;
           break;
       }
     });

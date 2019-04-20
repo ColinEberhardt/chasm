@@ -1,4 +1,9 @@
-import { unsignedLEB128, signedLEB128, encodeString, ieee754 } from "./encoding";
+import {
+  unsignedLEB128,
+  signedLEB128,
+  encodeString,
+  ieee754
+} from "./encoding";
 import traverse from "./traverse";
 
 const flatten = (arr: any[]) => [].concat.apply([], arr);
@@ -40,6 +45,7 @@ enum Opcodes {
   call = 0x10,
   get_local = 0x20,
   set_local = 0x21,
+  i32_store_8 = 0x3a,
   f32_const = 0x43,
   i32_eqz = 0x45,
   f32_eq = 0x5b,
@@ -49,7 +55,8 @@ enum Opcodes {
   f32_add = 0x92,
   f32_sub = 0x93,
   f32_mul = 0x94,
-  f32_div = 0x95
+  f32_div = 0x95,
+  i32_trunc_f32_s = 0xa8
 }
 
 const binaryOpcode = {
@@ -83,13 +90,13 @@ const moduleVersion = [0x01, 0x00, 0x00, 0x00];
 // https://webassembly.github.io/spec/core/binary/conventions.html#binary-vec
 // Vectors are encoded with their length followed by their element sequence
 const encodeVector = (data: any[]) => [
-  unsignedLEB128(data.length),
+  ...unsignedLEB128(data.length),
   ...flatten(data)
 ];
 
 // https://webassembly.github.io/spec/core/binary/modules.html#code-section
 const encodeLocal = (count: number, type: Valtype) => [
-  unsignedLEB128(count),
+  ...unsignedLEB128(count),
   type
 ];
 
@@ -129,49 +136,86 @@ const codeFromAst = (ast: Program) => {
       }
     });
 
-  const emitStatements = (statements: StatementNode[]) => 
+  const emitStatements = (statements: StatementNode[]) =>
     statements.forEach(statement => {
-    switch (statement.type) {
-      case "printStatement":
-        emitExpression(statement.expression);
-        code.push(Opcodes.call);
-        code.push(...unsignedLEB128(0));
-        break;
-      case "variableDeclaration":
-        emitExpression(statement.initializer);
-        code.push(Opcodes.set_local);
-        code.push(...unsignedLEB128(localIndexForSymbol(statement.name)));
-        break;
-      case "variableAssignment":
-        emitExpression(statement.value);
-        code.push(Opcodes.set_local);
-        code.push(...unsignedLEB128(localIndexForSymbol(statement.name)));
-        break;
-      case "whileStatement":
-        // outer block
-        code.push(Opcodes.block);
-        code.push(Blocktype.void);
-        // inner loop
-        code.push(Opcodes.loop);
-        code.push(Blocktype.void);
-        // compute the while expression
-        emitExpression(statement.expression);
-        code.push(Opcodes.i32_eqz);
-        // br_if $label0
-        code.push(Opcodes.br_if);
-        code.push(...signedLEB128(1));
-        // the nested logic
-        emitStatements(statement.statements);
-        // br $label1
-        code.push(Opcodes.br);
-        code.push(...signedLEB128(0));
-        // end loop
-        code.push(Opcodes.end);
-        // end block
-        code.push(Opcodes.end);
-        break;
-    }
-  });
+      switch (statement.type) {
+        case "printStatement":
+          emitExpression(statement.expression);
+          code.push(Opcodes.call);
+          code.push(...unsignedLEB128(0));
+          break;
+        case "variableDeclaration":
+          emitExpression(statement.initializer);
+          code.push(Opcodes.set_local);
+          code.push(...unsignedLEB128(localIndexForSymbol(statement.name)));
+          break;
+        case "variableAssignment":
+          emitExpression(statement.value);
+          code.push(Opcodes.set_local);
+          code.push(...unsignedLEB128(localIndexForSymbol(statement.name)));
+          break;
+        case "whileStatement":
+          // outer block
+          code.push(Opcodes.block);
+          code.push(Blocktype.void);
+          // inner loop
+          code.push(Opcodes.loop);
+          code.push(Blocktype.void);
+          // compute the while expression
+          emitExpression(statement.expression);
+          code.push(Opcodes.i32_eqz);
+          // br_if $label0
+          code.push(Opcodes.br_if);
+          code.push(...signedLEB128(1));
+          // the nested logic
+          emitStatements(statement.statements);
+          // br $label1
+          code.push(Opcodes.br);
+          code.push(...signedLEB128(0));
+          // end loop
+          code.push(Opcodes.end);
+          // end block
+          code.push(Opcodes.end);
+          break;
+        case "setpixelStatement":
+          // compute and cache the setpixel parameters
+          emitExpression(statement.x);
+          code.push(Opcodes.set_local);
+          code.push(...unsignedLEB128(localIndexForSymbol("x")));
+
+          emitExpression(statement.y);
+          code.push(Opcodes.set_local);
+          code.push(...unsignedLEB128(localIndexForSymbol("y")));
+
+          emitExpression(statement.color);
+          code.push(Opcodes.set_local);
+          code.push(...unsignedLEB128(localIndexForSymbol("color")));
+
+          // compute the offset (x * 100) + y
+          code.push(Opcodes.get_local);
+          code.push(...unsignedLEB128(localIndexForSymbol("y")));
+          code.push(Opcodes.f32_const);
+          code.push(...ieee754(100));
+          code.push(Opcodes.f32_mul);
+
+          code.push(Opcodes.get_local);
+          code.push(...unsignedLEB128(localIndexForSymbol("x")));
+          code.push(Opcodes.f32_add);
+
+          // convert to an integer
+          code.push(Opcodes.i32_trunc_f32_s);
+
+          // fetch the color
+          code.push(Opcodes.get_local);
+          code.push(...unsignedLEB128(localIndexForSymbol("color")));
+          code.push(Opcodes.i32_trunc_f32_s);
+
+          // write
+          code.push(Opcodes.i32_store_8);
+          code.push(...[0x00, 0x00]); // align and offset
+          break;
+      }
+    });
 
   emitStatements(ast);
 
@@ -210,9 +254,19 @@ export const emitter: Emitter = (ast: Program) => {
     0x01 // type index
   ];
 
+  const memoryImport = [
+    ...encodeString("env"),
+    ...encodeString("memory"),
+    ExportType.mem,
+    /* limits https://webassembly.github.io/spec/core/binary/types.html#limits -
+      indicates a min memory size of one page */
+    0x00,
+    0x01
+  ];
+
   const importSection = createSection(
     Section.import,
-    encodeVector([printFunctionImport])
+    encodeVector([printFunctionImport, memoryImport])
   );
 
   // the export section is a vector of exported functions

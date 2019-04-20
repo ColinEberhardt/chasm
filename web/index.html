@@ -47,11 +47,36 @@
         <div class="col-md-5">
           <b>Code</b>
           <textarea rows="20" class="form-control" id="code" wrap="off">
-print 42
+var y  = 0
+while (y < 100)
+  y = (y + 1)
+  var x  = 0
+  while (x < 100)
+    x = (x + 1)
+
+    var e = ((y / 50) - 1.5)
+    var f = ((x / 50) - 1)
+
+    var a = 0
+    var b = 0
+    var i = 0
+    var j = 0
+    var c = 0
+
+    while ((((i * i) + (j * j)) < 4) && (c < 255))
+      i = (((a * a) - (b * b)) + e)
+      j = (((2 * a) * b) + f)
+      a = i
+      b = j
+      c = (c + 1)
+    endwhile
+    setpixel x y c
+  endwhile
+endwhile
     </textarea
           >
         </div>
-        <div class="col-md-5">
+        <div class="col-md-3">
           <b>Console output</b>
           <textarea
             rows="20"
@@ -59,6 +84,10 @@ print 42
             class="form-control"
             wrap="off"
           ></textarea>
+        </div>
+        <div class="col-md-4">
+          <b>Canvas output</b>
+          <canvas id="canvas" width="300" height="300"></canvas>
         </div>
       </div>
     </div>

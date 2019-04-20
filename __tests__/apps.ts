@@ -40,6 +40,12 @@ const apps = [
     name: "while statements",
     input: "var f = 0 while (f < 5) f = (f + 1) print f endwhile",
     output: [1, 2, 3, 4, 5]
+  },
+  {
+    name: "setpixel statements",
+    input: "setpixel 1 2 3",
+    output: [] as any[],
+    pixels: [[201, 3]]
   }
 ];
 

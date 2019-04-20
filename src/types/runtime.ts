@@ -8,6 +8,7 @@ interface TickFunction {
 
 interface Environment {
   print: PrintFunction;
+  display: Uint8Array;
 }
 
 interface PrintFunction {
