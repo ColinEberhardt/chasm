@@ -19,6 +19,6 @@
     "test:tsc": "tsc --noEmit",
     "test:jest": "jest",
     "test:watch": "jest --watch",
-    "bundle": "browserify web/index.ts -p [ tsify ] > web/bundle.js"
+    "bundle": "browserify docs/index.ts -p [ tsify ] > docs/bundle.js"
   }
 }
