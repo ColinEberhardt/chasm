@@ -46,6 +46,30 @@ const apps = [
     input: "setpixel 1 2 3",
     output: [] as any[],
     pixels: [[201, 3]]
+  },
+  {
+    name: "if statement",
+    input: `
+var f = 5
+if (f < 10)
+  print 2
+endif
+if (f > 10)
+  print 3
+endif
+    `,
+    output: [2]
+  },
+  {
+    name: "else statement operator",
+    input: `
+if (5 < 3)
+  print 2
+else
+  print 3
+endif
+    `,
+    output: [3]
   }
 ];
 

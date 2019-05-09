@@ -1,4 +1,104 @@
 (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
+const interpreterRuntime = require("../src/interpreter").runtime;
+const compilerRuntime = require("../src/compiler").runtime;
+const { keywords, operators } = require("../src/tokenizer");
+const compileButton = document.getElementById("compile");
+const interpretButton = document.getElementById("interpret");
+const codeArea = document.getElementById("code");
+const outputArea = document.getElementById("output");
+const canvas = document.getElementById("canvas");
+// quick and dirty image data scaling
+// see: https://stackoverflow.com/questions/3448347/how-to-scale-an-imagedata-in-html-canvas
+const scaleImageData = (imageData, scale, ctx) => {
+    const scaled = ctx.createImageData(imageData.width * scale, imageData.height * scale);
+    const subLine = ctx.createImageData(scale, 1).data;
+    for (let row = 0; row < imageData.height; row++) {
+        for (let col = 0; col < imageData.width; col++) {
+            const sourcePixel = imageData.data.subarray((row * imageData.width + col) * 4, (row * imageData.width + col) * 4 + 4);
+            for (let x = 0; x < scale; x++)
+                subLine.set(sourcePixel, x * 4);
+            for (let y = 0; y < scale; y++) {
+                const destRow = row * scale + y;
+                const destCol = col * scale;
+                scaled.data.set(subLine, (destRow * scaled.width + destCol) * 4);
+            }
+        }
+    }
+    return scaled;
+};
+CodeMirror.defineSimpleMode("simplemode", {
+    start: [
+        {
+            regex: new RegExp(`(${keywords.join("|")})`),
+            token: "keyword"
+        },
+        {
+            regex: /0x[a-f\d]+|[-+]?(?:\.\d+|\d+\.?\d*)(?:e[-+]?\d+)?/i,
+            token: "number"
+        },
+        { regex: /[-+\/*=<>!]+/, token: "operator" },
+        { regex: /[a-z$][\w$]*/, token: "variable" }
+    ]
+});
+const editor = CodeMirror.fromTextArea(codeArea, {
+    mode: "simplemode",
+    theme: "abcdef",
+    lineNumbers: true
+});
+const sleep = async (ms) => await new Promise(resolve => setTimeout(resolve, ms));
+let marker;
+const logMessage = (message) => (outputArea.value = outputArea.value + message + "\n");
+const markError = (token) => {
+    marker = editor.markText({ line: token.line, ch: token.char }, { line: token.line, ch: token.char + token.value.length }, { className: "error" });
+};
+const updateCanvas = (display) => {
+    const context = canvas.getContext("2d");
+    const imgData = context.createImageData(100, 100);
+    for (let i = 0; i < 100 * 100; i++) {
+        imgData.data[i * 4] = display[i];
+        imgData.data[i * 4 + 1] = display[i];
+        imgData.data[i * 4 + 2] = display[i];
+        imgData.data[i * 4 + 3] = 255;
+    }
+    const data = scaleImageData(imgData, 3, context);
+    context.putImageData(data, 0, 0);
+};
+const run = async (runtime) => {
+    if (marker) {
+        marker.clear();
+    }
+    await sleep(10);
+    let tickFunction;
+    try {
+        const display = new Uint8Array(10000);
+        tickFunction = await runtime(editor.getValue(), {
+            print: logMessage,
+            display
+        });
+        outputArea.value = "";
+        logMessage(`Executing ... `);
+        tickFunction();
+        updateCanvas(display);
+        interpretButton.classList.remove("active");
+        compileButton.classList.remove("active");
+    }
+    catch (error) {
+        logMessage(error.message);
+        markError(error.token);
+    }
+};
+interpretButton.addEventListener("click", async () => {
+    interpretButton.classList.add("active");
+    compileButton.classList.remove("active");
+    await run(interpreterRuntime);
+});
+compileButton.addEventListener("click", async () => {
+    compileButton.classList.add("active");
+    interpretButton.classList.remove("active");
+    await run(compilerRuntime);
+});
+
+},{"../src/compiler":5,"../src/interpreter":8,"../src/tokenizer":10}],2:[function(require,module,exports){
 'use strict'
 
 exports.byteLength = byteLength
@@ -151,7 +251,7 @@ function fromByteArray (uint8) {
   return parts.join('')
 }
 
-},{}],2:[function(require,module,exports){
+},{}],3:[function(require,module,exports){
 (function (Buffer){
 /*!
  * The buffer module from node.js, for the browser.
@@ -1932,7 +2032,7 @@ function numberIsNaN (obj) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"base64-js":1,"buffer":2,"ieee754":3}],3:[function(require,module,exports){
+},{"base64-js":2,"buffer":3,"ieee754":4}],4:[function(require,module,exports){
 exports.read = function (buffer, offset, isLE, mLen, nBytes) {
   var e, m
   var eLen = (nBytes * 8) - mLen - 1
@@ -2018,7 +2118,7 @@ exports.write = function (buffer, value, offset, isLE, mLen, nBytes) {
   buffer[offset + i - d] |= s * 128
 }
 
-},{}],4:[function(require,module,exports){
+},{}],5:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const emitter_1 = require("./emitter");
@@ -2042,7 +2142,7 @@ exports.runtime = async (src, env) => {
     };
 };
 
-},{"./emitter":5,"./parser":8,"./tokenizer":9}],5:[function(require,module,exports){
+},{"./emitter":6,"./parser":9,"./tokenizer":10}],6:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const encoding_1 = require("./encoding");
@@ -2087,8 +2187,10 @@ var Opcodes;
     Opcodes[Opcodes["get_local"] = 32] = "get_local";
     Opcodes[Opcodes["set_local"] = 33] = "set_local";
     Opcodes[Opcodes["i32_store_8"] = 58] = "i32_store_8";
+    Opcodes[Opcodes["i32_const"] = 65] = "i32_const";
     Opcodes[Opcodes["f32_const"] = 67] = "f32_const";
     Opcodes[Opcodes["i32_eqz"] = 69] = "i32_eqz";
+    Opcodes[Opcodes["i32_eq"] = 70] = "i32_eq";
     Opcodes[Opcodes["f32_eq"] = 91] = "f32_eq";
     Opcodes[Opcodes["f32_lt"] = 93] = "f32_lt";
     Opcodes[Opcodes["f32_gt"] = 94] = "f32_gt";
@@ -2204,6 +2306,36 @@ const codeFromAst = (ast) => {
                 // end block
                 code.push(Opcodes.end);
                 break;
+            case "ifStatement":
+                // if block
+                code.push(Opcodes.block);
+                code.push(Blocktype.void);
+                // compute the if expression
+                emitExpression(statement.expression);
+                code.push(Opcodes.i32_eqz);
+                // br_if $label0
+                code.push(Opcodes.br_if);
+                code.push(...encoding_1.signedLEB128(0));
+                // the nested logic
+                emitStatements(statement.consequent);
+                // end block
+                code.push(Opcodes.end);
+                // else block
+                code.push(Opcodes.block);
+                code.push(Blocktype.void);
+                // compute the if expression
+                emitExpression(statement.expression);
+                code.push(Opcodes.i32_const);
+                code.push(...encoding_1.signedLEB128(1));
+                code.push(Opcodes.i32_eq);
+                // br_if $label0
+                code.push(Opcodes.br_if);
+                code.push(...encoding_1.signedLEB128(0));
+                // the nested logic
+                emitStatements(statement.alternate);
+                // end block
+                code.push(Opcodes.end);
+                break;
             case "setpixelStatement":
                 // compute and cache the setpixel parameters
                 emitExpression(statement.x);
@@ -2294,7 +2426,7 @@ exports.emitter = (ast) => {
     ]);
 };
 
-},{"./encoding":6,"./traverse":10}],6:[function(require,module,exports){
+},{"./encoding":7,"./traverse":11}],7:[function(require,module,exports){
 (function (Buffer){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
@@ -2337,7 +2469,7 @@ exports.unsignedLEB128 = (n) => {
 };
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":2}],7:[function(require,module,exports){
+},{"buffer":3}],8:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const tokenizer_1 = require("./tokenizer");
@@ -2394,6 +2526,14 @@ exports.runtime = async (src, { print, display }) => () => {
                         executeStatements(statement.statements);
                     }
                     break;
+                case "ifStatement":
+                    if (evaluateExpression(statement.expression)) {
+                        executeStatements(statement.consequent);
+                    }
+                    else {
+                        executeStatements(statement.alternate);
+                    }
+                    break;
                 case "setpixelStatement":
                     const x = evaluateExpression(statement.x);
                     const y = evaluateExpression(statement.y);
@@ -2406,7 +2546,7 @@ exports.runtime = async (src, { print, display }) => () => {
     executeStatements(program);
 };
 
-},{"./parser":8,"./tokenizer":9}],8:[function(require,module,exports){
+},{"./parser":9,"./tokenizer":10}],9:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 class ParserError extends Error {
@@ -2468,6 +2608,27 @@ exports.parse = tokens => {
             expression: parseExpression()
         };
     };
+    const parseIfStatement = () => {
+        eatToken("if");
+        const expression = parseExpression();
+        let elseStatements = false;
+        const consequent = [];
+        const alternate = [];
+        while (!currentTokenIsKeyword("endif")) {
+            if (currentTokenIsKeyword("else")) {
+                eatToken("else");
+                elseStatements = true;
+            }
+            if (elseStatements) {
+                alternate.push(parseStatement());
+            }
+            else {
+                consequent.push(parseStatement());
+            }
+        }
+        eatToken("endif");
+        return { type: "ifStatement", expression, consequent, alternate };
+    };
     const parseWhileStatement = () => {
         eatToken("while");
         const expression = parseExpression();
@@ -2513,6 +2674,8 @@ exports.parse = tokens => {
                     return parseVariableDeclarationStatement();
                 case "while":
                     return parseWhileStatement();
+                case "if":
+                    return parseIfStatement();
                 case "setpixel":
                     return parseSetPixelStatement();
                 default:
@@ -2530,10 +2693,19 @@ exports.parse = tokens => {
     return nodes;
 };
 
-},{}],9:[function(require,module,exports){
+},{}],10:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.keywords = ["print", "var", "while", "endwhile", "setpixel"];
+exports.keywords = [
+    "print",
+    "var",
+    "while",
+    "endwhile",
+    "setpixel",
+    "if",
+    "endif",
+    "else"
+];
 exports.operators = ["+", "-", "*", "/", "==", "<", ">", "&&"];
 const escapeRegEx = (text) => text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
 class TokenizerError extends Error {
@@ -2585,7 +2757,7 @@ exports.tokenize = input => {
     return tokens;
 };
 
-},{}],10:[function(require,module,exports){
+},{}],11:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 // post order ast walker
@@ -2606,104 +2778,4 @@ const traverse = (nodes, visitor) => {
 };
 exports.default = traverse;
 
-},{}],11:[function(require,module,exports){
-const interpreterRuntime = require("../src/interpreter").runtime;
-const compilerRuntime = require("../src/compiler").runtime;
-const { keywords, operators } = require("../src/tokenizer");
-const compileButton = document.getElementById("compile");
-const interpretButton = document.getElementById("interpret");
-const codeArea = document.getElementById("code");
-const outputArea = document.getElementById("output");
-const canvas = document.getElementById("canvas");
-// quick and dirty image data scaling
-// see: https://stackoverflow.com/questions/3448347/how-to-scale-an-imagedata-in-html-canvas
-const scaleImageData = (imageData, scale, ctx) => {
-    const scaled = ctx.createImageData(imageData.width * scale, imageData.height * scale);
-    const subLine = ctx.createImageData(scale, 1).data;
-    for (let row = 0; row < imageData.height; row++) {
-        for (let col = 0; col < imageData.width; col++) {
-            const sourcePixel = imageData.data.subarray((row * imageData.width + col) * 4, (row * imageData.width + col) * 4 + 4);
-            for (let x = 0; x < scale; x++)
-                subLine.set(sourcePixel, x * 4);
-            for (let y = 0; y < scale; y++) {
-                const destRow = row * scale + y;
-                const destCol = col * scale;
-                scaled.data.set(subLine, (destRow * scaled.width + destCol) * 4);
-            }
-        }
-    }
-    return scaled;
-};
-CodeMirror.defineSimpleMode("simplemode", {
-    start: [
-        {
-            regex: new RegExp(`(${keywords.join("|")})`),
-            token: "keyword"
-        },
-        {
-            regex: /0x[a-f\d]+|[-+]?(?:\.\d+|\d+\.?\d*)(?:e[-+]?\d+)?/i,
-            token: "number"
-        },
-        { regex: /[-+\/*=<>!]+/, token: "operator" },
-        { regex: /[a-z$][\w$]*/, token: "variable" }
-    ]
-});
-const editor = CodeMirror.fromTextArea(codeArea, {
-    mode: "simplemode",
-    theme: "abcdef",
-    lineNumbers: true
-});
-const sleep = async (ms) => await new Promise(resolve => setTimeout(resolve, ms));
-let marker;
-const logMessage = (message) => (outputArea.value = outputArea.value + message + "\n");
-const markError = (token) => {
-    marker = editor.markText({ line: token.line, ch: token.char }, { line: token.line, ch: token.char + token.value.length }, { className: "error" });
-};
-const updateCanvas = (display) => {
-    const context = canvas.getContext("2d");
-    const imgData = context.createImageData(100, 100);
-    for (let i = 0; i < 100 * 100; i++) {
-        imgData.data[i * 4] = display[i];
-        imgData.data[i * 4 + 1] = display[i];
-        imgData.data[i * 4 + 2] = display[i];
-        imgData.data[i * 4 + 3] = 255;
-    }
-    const data = scaleImageData(imgData, 3, context);
-    context.putImageData(data, 0, 0);
-};
-const run = async (runtime) => {
-    if (marker) {
-        marker.clear();
-    }
-    await sleep(10);
-    let tickFunction;
-    try {
-        const display = new Uint8Array(10000);
-        tickFunction = await runtime(editor.getValue(), {
-            print: logMessage,
-            display
-        });
-        outputArea.value = "";
-        logMessage(`Executing ... `);
-        tickFunction();
-        updateCanvas(display);
-        interpretButton.classList.remove("active");
-        compileButton.classList.remove("active");
-    }
-    catch (error) {
-        logMessage(error.message);
-        markError(error.token);
-    }
-};
-interpretButton.addEventListener("click", async () => {
-    interpretButton.classList.add("active");
-    compileButton.classList.remove("active");
-    await run(interpreterRuntime);
-});
-compileButton.addEventListener("click", async () => {
-    compileButton.classList.add("active");
-    interpretButton.classList.remove("active");
-    await run(compilerRuntime);
-});
-
-},{"../src/compiler":4,"../src/interpreter":7,"../src/tokenizer":9}]},{},[11]);
+},{}]},{},[1]);

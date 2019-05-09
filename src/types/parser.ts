@@ -15,7 +15,8 @@ type StatementNode =
   | VariableDeclarationNode
   | VariableAssignmentNode
   | WhileStatementNode
-  | SetPixelStatementNode;
+  | SetPixelStatementNode
+  | IfStatementNode;
 
 type Program = StatementNode[];
 
@@ -69,6 +70,13 @@ interface WhileStatementNode extends ProgramNode {
   type: "whileStatement";
   expression: ExpressionNode;
   statements: StatementNode[];
+}
+
+interface IfStatementNode extends ProgramNode {
+  type: "ifStatement";
+  expression: ExpressionNode;
+  consequent: StatementNode[];
+  alternate: StatementNode[];
 }
 
 interface ParserStep<T extends ProgramNode> {

@@ -46,8 +46,10 @@ enum Opcodes {
   get_local = 0x20,
   set_local = 0x21,
   i32_store_8 = 0x3a,
+  i32_const = 0x41,
   f32_const = 0x43,
   i32_eqz = 0x45,
+  i32_eq = 0x46,
   f32_eq = 0x5b,
   f32_lt = 0x5d,
   f32_gt = 0x5e,
@@ -147,12 +149,16 @@ const codeFromAst = (ast: Program) => {
         case "variableDeclaration":
           emitExpression(statement.initializer);
           code.push(Opcodes.set_local);
-          code.push(...unsignedLEB128(localIndexForSymbol(statement.name)));
+          code.push(
+            ...unsignedLEB128(localIndexForSymbol(statement.name))
+          );
           break;
         case "variableAssignment":
           emitExpression(statement.value);
           code.push(Opcodes.set_local);
-          code.push(...unsignedLEB128(localIndexForSymbol(statement.name)));
+          code.push(
+            ...unsignedLEB128(localIndexForSymbol(statement.name))
+          );
           break;
         case "whileStatement":
           // outer block
@@ -174,6 +180,37 @@ const codeFromAst = (ast: Program) => {
           code.push(...signedLEB128(0));
           // end loop
           code.push(Opcodes.end);
+          // end block
+          code.push(Opcodes.end);
+          break;
+        case "ifStatement":
+          // if block
+          code.push(Opcodes.block);
+          code.push(Blocktype.void);
+          // compute the if expression
+          emitExpression(statement.expression);
+          code.push(Opcodes.i32_eqz);
+          // br_if $label0
+          code.push(Opcodes.br_if);
+          code.push(...signedLEB128(0));
+          // the nested logic
+          emitStatements(statement.consequent);
+          // end block
+          code.push(Opcodes.end);
+
+          // else block
+          code.push(Opcodes.block);
+          code.push(Blocktype.void);
+          // compute the if expression
+          emitExpression(statement.expression);
+          code.push(Opcodes.i32_const);
+          code.push(...signedLEB128(1));
+          code.push(Opcodes.i32_eq);
+          // br_if $label0
+          code.push(Opcodes.br_if);
+          code.push(...signedLEB128(0));
+          // the nested logic
+          emitStatements(statement.alternate);
           // end block
           code.push(Opcodes.end);
           break;

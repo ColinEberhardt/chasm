@@ -22,14 +22,14 @@ export const parse: Parser = tokens => {
     if (value && value !== currentToken.value) {
       throw new ParserError(
         `Unexpected token value, expected ${value}, received ${
-        currentToken.value
+          currentToken.value
         }`,
         currentToken
       );
     }
-    currentToken = tokenIterator.next().value
+    currentToken = tokenIterator.next().value;
   };
-  
+
   const parseExpression: ParserStep<ExpressionNode> = () => {
     let node: ExpressionNode;
     switch (currentToken.type) {
@@ -71,6 +71,31 @@ export const parse: Parser = tokens => {
       type: "printStatement",
       expression: parseExpression()
     };
+  };
+
+  const parseIfStatement: ParserStep<IfStatementNode> = () => {
+    eatToken("if");
+
+    const expression = parseExpression();
+
+    let elseStatements = false;
+    const consequent: StatementNode[] = [];
+    const alternate: StatementNode[] = [];
+    while (!currentTokenIsKeyword("endif")) {
+      if (currentTokenIsKeyword("else")) {
+        eatToken("else");
+        elseStatements = true;
+      }
+      if (elseStatements) {
+        alternate.push(parseStatement());
+      } else {
+        consequent.push(parseStatement());
+      }
+    }
+
+    eatToken("endif");
+
+    return { type: "ifStatement", expression, consequent, alternate };
   };
 
   const parseWhileStatement: ParserStep<WhileStatementNode> = () => {
@@ -128,6 +153,8 @@ export const parse: Parser = tokens => {
           return parseVariableDeclarationStatement();
         case "while":
           return parseWhileStatement();
+        case "if":
+          return parseIfStatement();
         case "setpixel":
           return parseSetPixelStatement();
         default:

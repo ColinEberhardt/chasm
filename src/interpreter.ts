@@ -57,11 +57,21 @@ export const runtime: Runtime = async (src, { print, display }) => () => {
           );
           break;
         case "variableAssignment":
-          symbols.set(statement.name, evaluateExpression(statement.value));
+          symbols.set(
+            statement.name,
+            evaluateExpression(statement.value)
+          );
           break;
         case "whileStatement":
           while (evaluateExpression(statement.expression)) {
             executeStatements(statement.statements);
+          }
+          break;
+        case "ifStatement":
+          if (evaluateExpression(statement.expression)) {
+            executeStatements(statement.consequent);
+          } else {
+            executeStatements(statement.alternate);
           }
           break;
         case "setpixelStatement":

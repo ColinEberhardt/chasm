@@ -1,4 +1,13 @@
-export const keywords = ["print", "var", "while", "endwhile", "setpixel"];
+export const keywords = [
+  "print",
+  "var",
+  "while",
+  "endwhile",
+  "setpixel",
+  "if",
+  "endif",
+  "else"
+];
 export const operators = ["+", "-", "*", "/", "==", "<", ">", "&&"];
 
 const escapeRegEx = (text: string) =>
