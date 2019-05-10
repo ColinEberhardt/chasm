@@ -26,21 +26,71 @@
         border-style: dotted;
         border-width: 2px;
       }
+      .container-fluid, .navbar {
+        margin-bottom: 50px;
+      }
     </style>
+
     <script src="https://unpkg.com/codemirror@5.45.0/lib/codemirror.js"></script>
     <script src="https://unpkg.com/codemirror@5.45.0/addon/mode/simple.js"></script>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js"
+      integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js"
+      integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q" crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js"
+      integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl" crossorigin="anonymous"></script>
+
     <link rel="stylesheet" href="https://unpkg.com/codemirror@5.45.0/theme/abcdef.css" />
     <link rel="stylesheet" href="https://unpkg.com/codemirror@5.45.0/lib/codemirror.css" />
   </head>
-  <body>
-    <nav class="navbar navbar-expand-lg navbar-light bg-light">
-      <button id="interpret" class="btn btn-outline-success">
-        Run (interpreter)
-      </button>
-      <button id="compile" class="btn btn-outline-success">
-        Run (compiler)
-      </button>
+  <body class="container">
+    <nav class="navbar navbar-expand-lg navbar-light bg-light justify-content-between">
+      <div>
+        <button id="interpret" class="btn btn-outline-success">
+          Run (interpreter)
+        </button>
+        <button id="compile" class="btn btn-outline-success">
+          Run (compiler)
+        </button>
+        <button type="button" class="btn btn-outline-success" data-toggle="modal" data-target="#shareModal">
+          Share
+        </button>
+      </div>
+      <form class="form-inline my-2 my-lg-0">
+        <a class="navbar-brand" href="https://github.com/ColinEberhardt/chasm">chasm</a>
+        <a href="https://github.com/ColinEberhardt/chasm">
+          <img src="GitHub-Mark-64px.png" style="width: 32px; height: 32px"/>
+        </a>
+      </form>
     </nav>
+
+    
+    <div class="modal fade" id="shareModal" tabindex="-1" role="dialog">
+      <div class="modal-dialog" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Share your playground code ...</h5>
+            <button type="button" class="close" data-dismiss="modal">
+              <span aria-hidden="true">&times;</span>
+            </button>
+          </div>
+          <div class="modal-body">
+            <form>
+              <div class="input-group mb-3">
+                <input type="text" class="form-control" id="shareUrl">
+                <div class="input-group-append">
+                  <button class="btn btn-outline-secondary" type="button" id="copyUrl">Copy</button>
+                </div>
+              </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <div class="container-fluid">
       <div class="row">
@@ -91,6 +141,22 @@ endwhile
         </div>
       </div>
     </div>
+
+    <p><i>chasm</i> is a very simple programming language which I developed to accompany a talk at
+      <a href="https://skillsmatter.com/conferences/11077-fullstack-nyc-2019-the-conference-on-javascript-node-and-internet-of-things">FullStack Conference NYC</a>. It is not intended to be a fully featured language; rather, its purpose is two-fold:</p>
+    
+    <p>
+      <ol>
+        <li>Introduce the basic building blocks of compilers - and show that they aren't that scary or difficult!</li>
+        <li>Reveal some of the inner working of WebAssembly, a new and exciting language / runtime that I think people need to
+        know more about.</li>
+      </ol>
+    </p>
+
+    <p>The <i>chasm</i> compiler is written in TypeScript, you can try it out using the above editor. When you click either of the 'run' buttons above, the code is tokenised then parsed into an Abstract Syntax Tree (AST). If you use the interpreter this AST is executed by a JavaScript interpreter. If you use the compiler, this AST is compiled to a WebAssembly module then executed via the browser's WebAssembly runtime.
+    </p>
+    
+
     <script src="bundle.js"></script>
   </body>
 </html>

@@ -1,4 +1,5 @@
 declare var CodeMirror: any;
+declare var $: any;
 
 const interpreterRuntime = require("../src/interpreter").runtime;
 const compilerRuntime = require("../src/compiler").runtime;
@@ -9,6 +10,13 @@ const interpretButton = document.getElementById("interpret");
 const codeArea = document.getElementById("code") as HTMLTextAreaElement;
 const outputArea = document.getElementById("output") as HTMLTextAreaElement;
 const canvas = document.getElementById("canvas") as HTMLCanvasElement;
+const shareUrl = document.getElementById("shareUrl") as HTMLInputElement;
+const copyUrl = document.getElementById("copyUrl") as HTMLInputElement;
+
+if (window.location.hash) {
+  const encoded = window.location.href.split("#")[1];
+  codeArea.value = atob(decodeURIComponent(encoded));
+}
 
 // quick and dirty image data scaling
 // see: https://stackoverflow.com/questions/3448347/how-to-scale-an-imagedata-in-html-canvas
@@ -60,6 +68,16 @@ const editor = CodeMirror.fromTextArea(codeArea, {
   lineNumbers: true
 });
 
+$("#shareModal").on("show.bs.modal", () => {
+  const baseUrl = window.location.href.split("#")[0];
+  const code = encodeURIComponent(btoa(editor.getValue()));
+  shareUrl.value = `${baseUrl}#${code}`;
+});
+
+copyUrl.addEventListener("click", () =>
+  navigator.clipboard.writeText(shareUrl.value)
+);
+
 const sleep = async (ms: number) =>
   await new Promise(resolve => setTimeout(resolve, ms));
 
@@ -105,9 +123,11 @@ const run = async (runtime: Runtime) => {
       display
     });
 
+    history.pushState(null, null, "#myhash");
+
     outputArea.value = "";
     logMessage(`Executing ... `);
-    
+
     tickFunction();
     updateCanvas(display);
 

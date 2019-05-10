@@ -7,6 +7,12 @@ const interpretButton = document.getElementById("interpret");
 const codeArea = document.getElementById("code");
 const outputArea = document.getElementById("output");
 const canvas = document.getElementById("canvas");
+const shareUrl = document.getElementById("shareUrl");
+const copyUrl = document.getElementById("copyUrl");
+if (window.location.hash) {
+    const encoded = window.location.href.split("#")[1];
+    codeArea.value = atob(decodeURIComponent(encoded));
+}
 // quick and dirty image data scaling
 // see: https://stackoverflow.com/questions/3448347/how-to-scale-an-imagedata-in-html-canvas
 const scaleImageData = (imageData, scale, ctx) => {
@@ -45,6 +51,12 @@ const editor = CodeMirror.fromTextArea(codeArea, {
     theme: "abcdef",
     lineNumbers: true
 });
+$("#shareModal").on("show.bs.modal", () => {
+    const baseUrl = window.location.href.split("#")[0];
+    const code = encodeURIComponent(btoa(editor.getValue()));
+    shareUrl.value = `${baseUrl}#${code}`;
+});
+copyUrl.addEventListener("click", () => navigator.clipboard.writeText(shareUrl.value));
 const sleep = async (ms) => await new Promise(resolve => setTimeout(resolve, ms));
 let marker;
 const logMessage = (message) => (outputArea.value = outputArea.value + message + "\n");
@@ -75,6 +87,7 @@ const run = async (runtime) => {
             print: logMessage,
             display
         });
+        history.pushState(null, null, "#myhash");
         outputArea.value = "";
         logMessage(`Executing ... `);
         tickFunction();
