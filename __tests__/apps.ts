@@ -22,6 +22,11 @@ const apps = [
     output: [22]
   },
   {
+    name: "variable declaration",
+    input: "var foo = 21 print foo",
+    output: [21]
+  },
+  {
     name: "floating point variable declaration",
     input: "var f = 22.5 print f",
     output: [22.5]
