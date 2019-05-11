@@ -2738,7 +2738,7 @@ const regexMatcher = (regex, type) => (input, index) => {
 };
 // matchers in precedence order
 const matchers = [
-    regexMatcher("^[.0-9]+", "number"),
+    regexMatcher("^-?[.0-9]+([eE]-?[0-9]{2})?", "number"),
     regexMatcher(`^(${exports.keywords.join("|")})`, "keyword"),
     regexMatcher("^\\s+", "whitespace"),
     regexMatcher(`^(${exports.operators.map(escapeRegEx).join("|")})`, "operator"),

@@ -13,7 +13,7 @@ const apps = [
   },
   {
     name: "nested binary expressions",
-    input: "print ((6-4)+10)",
+    input: "print ((6 - 4)+10)",
     output: [12]
   },
   {
@@ -35,6 +35,11 @@ const apps = [
     name: "floating point variable assignment",
     input: "var f = 22.5 f = (f+1.5) print f",
     output: [24]
+  },
+  {
+    name: "handles scientific notation and various other numeric formats",
+    input: "print 23e02 print -2 print .5",
+    output: [2300, -2, 0.5]
   },
   {
     name: "while statements",
