@@ -44,3 +44,37 @@ test("parses print statement with unary expression", () => {
     expression: { type: "numberLiteral", value: 22 }
   });
 });
+
+test("parses proc with single arg", () => {
+  const tokens = [
+    { type: "keyword", value: "proc" },
+    { type: "identifier", value: "fish" },
+    { type: "parens", value: "(" },
+    { type: "identifier", value: "foo" },
+    { type: "parens", value: ")" },
+    { type: "keyword", value: "print" },
+    { type: "number", value: "22" },
+    { type: "keyword", value: "endproc" }
+  ];
+
+  const ast = parse(tokens);
+  expect(ast.length).toEqual(1);
+
+  const node = ast[0];
+  expect(node).toEqual({
+    type: "procStatement",
+    name: "fish",
+    args: [
+      {
+        type: "identifier",
+        value: "foo"
+      }
+    ],
+    statements: [
+      {
+        type: "printStatement",
+        expression: { type: "numberLiteral", value: 22 }
+      }
+    ]
+  });
+});

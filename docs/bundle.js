@@ -2349,15 +2349,15 @@ const codeFromAst = (ast) => {
                 // end block
                 code.push(Opcodes.end);
                 break;
-            case "setpixelStatement":
+            case "callStatement":
                 // compute and cache the setpixel parameters
-                emitExpression(statement.x);
+                emitExpression(statement.args[0]);
                 code.push(Opcodes.set_local);
                 code.push(...encoding_1.unsignedLEB128(localIndexForSymbol("x")));
-                emitExpression(statement.y);
+                emitExpression(statement.args[1]);
                 code.push(Opcodes.set_local);
                 code.push(...encoding_1.unsignedLEB128(localIndexForSymbol("y")));
-                emitExpression(statement.color);
+                emitExpression(statement.args[2]);
                 code.push(Opcodes.set_local);
                 code.push(...encoding_1.unsignedLEB128(localIndexForSymbol("color")));
                 // compute the offset (x * 100) + y
@@ -2547,10 +2547,10 @@ exports.runtime = async (src, { print, display }) => () => {
                         executeStatements(statement.alternate);
                     }
                     break;
-                case "setpixelStatement":
-                    const x = evaluateExpression(statement.x);
-                    const y = evaluateExpression(statement.y);
-                    const color = evaluateExpression(statement.color);
+                case "callStatement":
+                    const x = evaluateExpression(statement.args[0]);
+                    const y = evaluateExpression(statement.args[1]);
+                    const color = evaluateExpression(statement.args[2]);
                     display[y * 100 + x] = color;
                     break;
             }
@@ -2576,12 +2576,14 @@ const asOperator = (value) => {
 exports.parse = tokens => {
     const tokenIterator = tokens[Symbol.iterator]();
     let currentToken = tokenIterator.next().value;
+    let nextToken = tokenIterator.next().value;
     const currentTokenIsKeyword = (name) => currentToken.value === name && currentToken.type === "keyword";
     const eatToken = (value) => {
         if (value && value !== currentToken.value) {
             throw new ParserError(`Unexpected token value, expected ${value}, received ${currentToken.value}`, currentToken);
         }
-        currentToken = tokenIterator.next().value;
+        currentToken = nextToken;
+        nextToken = tokenIterator.next().value;
     };
     const parseExpression = () => {
         let node;
@@ -2669,13 +2671,57 @@ exports.parse = tokens => {
             initializer: parseExpression()
         };
     };
-    const parseSetPixelStatement = () => {
-        eatToken("setpixel");
+    const parseCallStatementNode = () => {
+        const name = currentToken.value;
+        eatToken();
+        const args = [];
+        eatToken("(");
+        if (currentToken.value !== ")") {
+            while (currentToken.value !== ")") {
+                args.push(parseExpression());
+                // eatToken();
+                if (currentToken.value !== ")") {
+                    eatToken(",");
+                }
+            }
+        }
+        eatToken(")");
         return {
-            type: "setpixelStatement",
-            x: parseExpression(),
-            y: parseExpression(),
-            color: parseExpression()
+            type: "callStatement",
+            name,
+            args
+        };
+    };
+    const parseArgs = () => {
+        const args = [];
+        eatToken("(");
+        if (currentToken.value !== ")") {
+            while (currentToken.value !== ")") {
+                args.push({ type: "identifier", value: currentToken.value });
+                eatToken();
+                if (currentToken.value !== ")") {
+                    eatToken(",");
+                }
+            }
+        }
+        eatToken(")");
+        return args;
+    };
+    const parseProcStatement = () => {
+        eatToken("proc");
+        const name = currentToken.value;
+        eatToken();
+        const args = parseArgs();
+        const statements = [];
+        while (!currentTokenIsKeyword("endproc")) {
+            statements.push(parseStatement());
+        }
+        eatToken("endproc");
+        return {
+            type: "procStatement",
+            name,
+            args,
+            statements
         };
     };
     const parseStatement = () => {
@@ -2689,14 +2735,19 @@ exports.parse = tokens => {
                     return parseWhileStatement();
                 case "if":
                     return parseIfStatement();
-                case "setpixel":
-                    return parseSetPixelStatement();
+                case "proc":
+                    return parseProcStatement();
                 default:
                     throw new ParserError(`Unknown keyword ${currentToken.value}`, currentToken);
             }
         }
         else if (currentToken.type === "identifier") {
-            return parseVariableAssignment();
+            if (nextToken.value === "=") {
+                return parseVariableAssignment();
+            }
+            else {
+                return parseCallStatementNode();
+            }
         }
     };
     const nodes = [];
@@ -2714,12 +2765,13 @@ exports.keywords = [
     "var",
     "while",
     "endwhile",
-    "setpixel",
     "if",
     "endif",
-    "else"
+    "else",
+    "proc",
+    "endproc"
 ];
-exports.operators = ["+", "-", "*", "/", "==", "<", ">", "&&"];
+exports.operators = ["+", "-", "*", "/", "==", "<", ">", "&&", ","];
 const escapeRegEx = (text) => text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
 class TokenizerError extends Error {
     constructor(message, index) {
@@ -2742,7 +2794,7 @@ const matchers = [
     regexMatcher(`^(${exports.keywords.join("|")})`, "keyword"),
     regexMatcher("^\\s+", "whitespace"),
     regexMatcher(`^(${exports.operators.map(escapeRegEx).join("|")})`, "operator"),
-    regexMatcher(`^[a-z]`, "identifier"),
+    regexMatcher(`^[a-zA-Z]+`, "identifier"),
     regexMatcher(`^=`, "assignment"),
     regexMatcher("^[()]{1}", "parens")
 ];

@@ -14,6 +14,7 @@ const asOperator = (value: string): Operator => {
 export const parse: Parser = tokens => {
   const tokenIterator = tokens[Symbol.iterator]();
   let currentToken = tokenIterator.next().value;
+  let nextToken = tokenIterator.next().value;
 
   const currentTokenIsKeyword = (name: string) =>
     currentToken.value === name && currentToken.type === "keyword";
@@ -27,7 +28,8 @@ export const parse: Parser = tokens => {
         currentToken
       );
     }
-    currentToken = tokenIterator.next().value;
+    currentToken = nextToken;
+    nextToken = tokenIterator.next().value;
   };
 
   const parseExpression: ParserStep<ExpressionNode> = () => {
@@ -134,13 +136,55 @@ export const parse: Parser = tokens => {
     };
   };
 
-  const parseSetPixelStatement: ParserStep<SetPixelStatementNode> = () => {
-    eatToken("setpixel");
+  const parseCallStatementNode: ParserStep<CallStatementNode> = () => {
+    const name = currentToken.value;
+    eatToken();
+
+    const args = parseCommaSeperatedList(() => parseExpression());
+
     return {
-      type: "setpixelStatement",
-      x: parseExpression(),
-      y: parseExpression(),
-      color: parseExpression()
+      type: "callStatement",
+      name,
+      args
+    };
+  };
+
+  function parseCommaSeperatedList<T>(foo: () => T): T[] {
+    const args: T[] = [];
+    eatToken("(");
+    while (currentToken.value !== ")") {
+      args.push(foo());
+      if (currentToken.value !== ")") {
+        eatToken(",");
+      }
+    }
+    eatToken(")");
+    return args;
+  }
+
+  const parseProcStatement: ParserStep<ProcStatementNode> = () => {
+    eatToken("proc");
+
+    const name = currentToken.value;
+    eatToken();
+
+    const args = parseCommaSeperatedList(() => {
+      const arg: IdentifierNode = { type: "identifier", value: currentToken.value };
+      eatToken();
+      return arg;
+    });
+
+    const statements: StatementNode[] = [];
+    while (!currentTokenIsKeyword("endproc")) {
+      statements.push(parseStatement());
+    }
+    eatToken("endproc");
+
+    return {
+      type: "procStatement",
+      name,
+      args,
+      statements
     };
   };
 
@@ -155,8 +199,8 @@ export const parse: Parser = tokens => {
           return parseWhileStatement();
         case "if":
           return parseIfStatement();
-        case "setpixel":
-          return parseSetPixelStatement();
+        case "proc":
+          return parseProcStatement();
         default:
           throw new ParserError(
             `Unknown keyword ${currentToken.value}`,
@@ -164,7 +208,11 @@ export const parse: Parser = tokens => {
           );
       }
     } else if (currentToken.type === "identifier") {
-      return parseVariableAssignment();
+      if (nextToken.value === "=") {
+        return parseVariableAssignment();
+      } else {
+        return parseCallStatementNode();
+      }
     }
   };
 

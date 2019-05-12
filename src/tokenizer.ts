@@ -3,12 +3,13 @@ export const keywords = [
   "var",
   "while",
   "endwhile",
-  "setpixel",
   "if",
   "endif",
-  "else"
+  "else",
+  "proc",
+  "endproc"
 ];
-export const operators = ["+", "-", "*", "/", "==", "<", ">", "&&"];
+export const operators = ["+", "-", "*", "/", "==", "<", ">", "&&", ","];
 
 const escapeRegEx = (text: string) =>
   text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");

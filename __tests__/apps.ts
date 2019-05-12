@@ -53,7 +53,7 @@ const apps = [
   },
   {
     name: "setpixel statements",
-    input: "setpixel 1 2 3",
+    input: "setpixel (1, 2, 3)",
     output: [] as any[],
     pixels: [[201, 3]]
   },

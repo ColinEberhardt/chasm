@@ -74,10 +74,10 @@ export const runtime: Runtime = async (src, { print, display }) => () => {
             executeStatements(statement.alternate);
           }
           break;
-        case "setpixelStatement":
-          const x = evaluateExpression(statement.x);
-          const y = evaluateExpression(statement.y);
-          const color = evaluateExpression(statement.color);
+        case "callStatement":
+          const x = evaluateExpression(statement.args[0]);
+          const y = evaluateExpression(statement.args[1]);
+          const color = evaluateExpression(statement.args[2]);
           display[y * 100 + x] = color;
           break;
       }

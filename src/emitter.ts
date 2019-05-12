@@ -214,17 +214,17 @@ const codeFromAst = (ast: Program) => {
           // end block
           code.push(Opcodes.end);
           break;
-        case "setpixelStatement":
+        case "callStatement":
           // compute and cache the setpixel parameters
-          emitExpression(statement.x);
+          emitExpression(statement.args[0]);
           code.push(Opcodes.set_local);
           code.push(...unsignedLEB128(localIndexForSymbol("x")));
 
-          emitExpression(statement.y);
+          emitExpression(statement.args[1]);
           code.push(Opcodes.set_local);
           code.push(...unsignedLEB128(localIndexForSymbol("y")));
 
-          emitExpression(statement.color);
+          emitExpression(statement.args[2]);
           code.push(Opcodes.set_local);
           code.push(...unsignedLEB128(localIndexForSymbol("color")));
 
