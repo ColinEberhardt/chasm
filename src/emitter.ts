@@ -109,10 +109,12 @@ const createSection = (sectionType: Section, data: any[]) => [
   ...encodeVector(data)
 ];
 
-const codeFromAst = (ast: Program) => {
+const codeFromProc = (node: ProcStatementNode) => {
   const code: number[] = [];
 
-  const symbols = new Map<string, number>();
+  const symbols = new Map<string, number>(
+    node.args.map((arg, index) => [arg.value, index])
+  );
 
   const localIndexForSymbol = (name: string) => {
     if (!symbols.has(name)) {
@@ -149,16 +151,12 @@ const codeFromAst = (ast: Program) => {
         case "variableDeclaration":
           emitExpression(statement.initializer);
           code.push(Opcodes.set_local);
-          code.push(
-            ...unsignedLEB128(localIndexForSymbol(statement.name))
-          );
+          code.push(...unsignedLEB128(localIndexForSymbol(statement.name)));
           break;
         case "variableAssignment":
           emitExpression(statement.value);
           code.push(Opcodes.set_local);
-          code.push(
-            ...unsignedLEB128(localIndexForSymbol(statement.name))
-          );
+          code.push(...unsignedLEB128(localIndexForSymbol(statement.name)));
           break;
         case "whileStatement":
           // outer block
@@ -254,7 +252,7 @@ const codeFromAst = (ast: Program) => {
       }
     });
 
-  emitStatements(ast);
+  emitStatements(node.statements);
 
   return { code, localCount: symbols.size };
 };
@@ -315,7 +313,8 @@ export const emitter: Emitter = (ast: Program) => {
   );
 
   // the code section contains vectors of functions
-  const { code, localCount } = codeFromAst(ast);
+  const main = ast.find(f => f.name === "main");
+  const { code, localCount } = codeFromProc(main);
 
   const locals = localCount > 0 ? [encodeLocal(localCount, Valtype.f32)] : [];
 

@@ -87,7 +87,6 @@ const run = async (runtime) => {
             print: logMessage,
             display
         });
-        history.pushState(null, null, "#myhash");
         outputArea.value = "";
         logMessage(`Executing ... `);
         tickFunction();
@@ -2255,9 +2254,9 @@ const createSection = (sectionType, data) => [
     sectionType,
     ...encodeVector(data)
 ];
-const codeFromAst = (ast) => {
+const codeFromProc = (node) => {
     const code = [];
-    const symbols = new Map();
+    const symbols = new Map(node.args.map((arg, index) => [arg.value, index]));
     const localIndexForSymbol = (name) => {
         if (!symbols.has(name)) {
             symbols.set(name, symbols.size);
@@ -2381,7 +2380,7 @@ const codeFromAst = (ast) => {
                 break;
         }
     });
-    emitStatements(ast);
+    emitStatements(node.statements);
     return { code, localCount: symbols.size };
 };
 exports.emitter = (ast) => {
@@ -2420,7 +2419,8 @@ exports.emitter = (ast) => {
         [...encoding_1.encodeString("run"), ExportType.func, 0x01 /* function index */]
     ]));
     // the code section contains vectors of functions
-    const { code, localCount } = codeFromAst(ast);
+    const main = ast.find(f => f.name === "main");
+    const { code, localCount } = codeFromProc(main);
     const locals = localCount > 0 ? [encodeLocal(localCount, Valtype.f32)] : [];
     const functionBody = encodeVector([
         ...encodeVector(locals),
@@ -2508,10 +2508,8 @@ const applyOperator = (operator, left, right) => {
     }
     throw Error(`Unknown binary operator ${operator}`);
 };
-exports.runtime = async (src, { print, display }) => () => {
-    const tokens = tokenizer_1.tokenize(src);
-    const program = parser_1.parse(tokens);
-    const symbols = new Map();
+const executeProc = (node, env, program, args = []) => {
+    const symbols = new Map(node.args.map((arg, index) => [arg.value, args[index]]));
     const evaluateExpression = (expression) => {
         switch (expression.type) {
             case "numberLiteral":
@@ -2526,7 +2524,7 @@ exports.runtime = async (src, { print, display }) => () => {
         statements.forEach(statement => {
             switch (statement.type) {
                 case "printStatement":
-                    print(evaluateExpression(statement.expression));
+                    env.print(evaluateExpression(statement.expression));
                     break;
                 case "variableDeclaration":
                     symbols.set(statement.name, evaluateExpression(statement.initializer));
@@ -2548,15 +2546,29 @@ exports.runtime = async (src, { print, display }) => () => {
                     }
                     break;
                 case "callStatement":
-                    const x = evaluateExpression(statement.args[0]);
-                    const y = evaluateExpression(statement.args[1]);
-                    const color = evaluateExpression(statement.args[2]);
-                    display[y * 100 + x] = color;
+                    if (statement.name === "setpixel") {
+                        const x = evaluateExpression(statement.args[0]);
+                        const y = evaluateExpression(statement.args[1]);
+                        const color = evaluateExpression(statement.args[2]);
+                        env.display[y * 100 + x] = color;
+                    }
+                    else {
+                        const procName = statement.name;
+                        const argValues = statement.args.map(arg => evaluateExpression(arg));
+                        const proc = program.find(f => f.name === procName);
+                        executeProc(proc, env, program, argValues);
+                    }
                     break;
             }
         });
     };
-    executeStatements(program);
+    executeStatements(node.statements);
+};
+exports.runtime = async (src, env) => () => {
+    const tokens = tokenizer_1.tokenize(src);
+    const program = parser_1.parse(tokens);
+    const main = program.find(f => f.name === "main");
+    executeProc(main, env, program);
 };
 
 },{"./parser":9,"./tokenizer":10}],9:[function(require,module,exports){
@@ -2674,44 +2686,34 @@ exports.parse = tokens => {
     const parseCallStatementNode = () => {
         const name = currentToken.value;
         eatToken();
-        const args = [];
-        eatToken("(");
-        if (currentToken.value !== ")") {
-            while (currentToken.value !== ")") {
-                args.push(parseExpression());
-                // eatToken();
-                if (currentToken.value !== ")") {
-                    eatToken(",");
-                }
-            }
-        }
-        eatToken(")");
+        const args = parseCommaSeperatedList(() => parseExpression());
         return {
             type: "callStatement",
             name,
             args
         };
     };
-    const parseArgs = () => {
+    function parseCommaSeperatedList(foo) {
         const args = [];
         eatToken("(");
-        if (currentToken.value !== ")") {
-            while (currentToken.value !== ")") {
-                args.push({ type: "identifier", value: currentToken.value });
-                eatToken();
-                if (currentToken.value !== ")") {
-                    eatToken(",");
-                }
+        while (currentToken.value !== ")") {
+            args.push(foo());
+            if (currentToken.value !== ")") {
+                eatToken(",");
             }
         }
         eatToken(")");
         return args;
-    };
+    }
     const parseProcStatement = () => {
         eatToken("proc");
         const name = currentToken.value;
         eatToken();
-        const args = parseArgs();
+        const args = parseCommaSeperatedList(() => {
+            const arg = { type: "identifier", value: currentToken.value };
+            eatToken();
+            return arg;
+        });
         const statements = [];
         while (!currentTokenIsKeyword("endproc")) {
             statements.push(parseStatement());
@@ -2735,8 +2737,6 @@ exports.parse = tokens => {
                     return parseWhileStatement();
                 case "if":
                     return parseIfStatement();
-                case "proc":
-                    return parseProcStatement();
                 default:
                     throw new ParserError(`Unknown keyword ${currentToken.value}`, currentToken);
             }
@@ -2752,7 +2752,7 @@ exports.parse = tokens => {
     };
     const nodes = [];
     while (currentToken) {
-        nodes.push(parseStatement());
+        nodes.push(parseProcStatement());
     }
     return nodes;
 };

@@ -23,11 +23,15 @@ const applyOperator = (operator: string, left: number, right: number) => {
   throw Error(`Unknown binary operator ${operator}`);
 };
 
-export const runtime: Runtime = async (src, { print, display }) => () => {
-  const tokens = tokenize(src);
-  const program = parse(tokens);
-
-  const symbols = new Map();
+const executeProc = (
+  node: ProcStatementNode,
+  env: Environment,
+  program: Program,
+  args: number[] = []
+) => {
+  const symbols = new Map(
+    node.args.map((arg, index) => [arg.value, args[index]])
+  );
 
   const evaluateExpression = (expression: ExpressionNode): number => {
     switch (expression.type) {
@@ -48,7 +52,7 @@ export const runtime: Runtime = async (src, { print, display }) => () => {
     statements.forEach(statement => {
       switch (statement.type) {
         case "printStatement":
-          print(evaluateExpression(statement.expression));
+          env.print(evaluateExpression(statement.expression));
           break;
         case "variableDeclaration":
           symbols.set(
@@ -57,10 +61,7 @@ export const runtime: Runtime = async (src, { print, display }) => () => {
           );
           break;
         case "variableAssignment":
-          symbols.set(
-            statement.name,
-            evaluateExpression(statement.value)
-          );
+          symbols.set(statement.name, evaluateExpression(statement.value));
           break;
         case "whileStatement":
           while (evaluateExpression(statement.expression)) {
@@ -75,14 +76,32 @@ export const runtime: Runtime = async (src, { print, display }) => () => {
           }
           break;
         case "callStatement":
-          const x = evaluateExpression(statement.args[0]);
-          const y = evaluateExpression(statement.args[1]);
-          const color = evaluateExpression(statement.args[2]);
-          display[y * 100 + x] = color;
+          if (statement.name === "setpixel") {
+            const x = evaluateExpression(statement.args[0]);
+            const y = evaluateExpression(statement.args[1]);
+            const color = evaluateExpression(statement.args[2]);
+            env.display[y * 100 + x] = color;
+          } else {
+            const procName = statement.name;
+            const argValues = statement.args.map(arg =>
+              evaluateExpression(arg)
+            );
+            const proc = program.find(f => f.name === procName);
+            executeProc(proc, env, program, argValues);
+          }
           break;
       }
     });
   };
 
-  executeStatements(program);
+  executeStatements(node.statements);
+};
+
+export const runtime: Runtime = async (src, env) => () => {
+  const tokens = tokenize(src);
+  const program = parse(tokens);
+
+  const main = program.find(f => f.name === "main");
+
+  executeProc(main, env, program);
 };

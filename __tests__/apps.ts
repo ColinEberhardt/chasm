@@ -1,4 +1,4 @@
-const apps = [
+let apps = [
   { name: "an empty program", input: "", output: [] },
   { name: "a print statement", input: "print 8", output: [8] },
   {
@@ -85,5 +85,7 @@ endif
 
 // https://github.com/facebook/jest/issues/7280
 test.skip("skip", () => {});
+
+apps = apps.map(f => ({ ...f, input: `proc main() ${f.input} endproc` }));
 
 export default apps;

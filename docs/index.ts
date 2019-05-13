@@ -123,8 +123,6 @@ const run = async (runtime: Runtime) => {
       display
     });
 
-    history.pushState(null, null, "#myhash");
-
     outputArea.value = "";
     logMessage(`Executing ... `);
 

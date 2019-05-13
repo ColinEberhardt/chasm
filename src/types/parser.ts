@@ -19,7 +19,7 @@ type StatementNode =
   | IfStatementNode
   | ProcStatementNode;
 
-type Program = StatementNode[];
+type Program = ProcStatementNode[];
 
 interface VariableDeclarationNode extends ProgramNode {
   type: "variableDeclaration";
