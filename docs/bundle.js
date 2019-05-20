@@ -2254,7 +2254,7 @@ const createSection = (sectionType, data) => [
     sectionType,
     ...encodeVector(data)
 ];
-const codeFromProc = (node) => {
+const codeFromProc = (node, program) => {
     const code = [];
     const symbols = new Map(node.args.map((arg, index) => [arg.value, index]));
     const localIndexForSymbol = (name) => {
@@ -2349,60 +2349,77 @@ const codeFromProc = (node) => {
                 code.push(Opcodes.end);
                 break;
             case "callStatement":
-                // compute and cache the setpixel parameters
-                emitExpression(statement.args[0]);
-                code.push(Opcodes.set_local);
-                code.push(...encoding_1.unsignedLEB128(localIndexForSymbol("x")));
-                emitExpression(statement.args[1]);
-                code.push(Opcodes.set_local);
-                code.push(...encoding_1.unsignedLEB128(localIndexForSymbol("y")));
-                emitExpression(statement.args[2]);
-                code.push(Opcodes.set_local);
-                code.push(...encoding_1.unsignedLEB128(localIndexForSymbol("color")));
-                // compute the offset (x * 100) + y
-                code.push(Opcodes.get_local);
-                code.push(...encoding_1.unsignedLEB128(localIndexForSymbol("y")));
-                code.push(Opcodes.f32_const);
-                code.push(...encoding_1.ieee754(100));
-                code.push(Opcodes.f32_mul);
-                code.push(Opcodes.get_local);
-                code.push(...encoding_1.unsignedLEB128(localIndexForSymbol("x")));
-                code.push(Opcodes.f32_add);
-                // convert to an integer
-                code.push(Opcodes.i32_trunc_f32_s);
-                // fetch the color
-                code.push(Opcodes.get_local);
-                code.push(...encoding_1.unsignedLEB128(localIndexForSymbol("color")));
-                code.push(Opcodes.i32_trunc_f32_s);
-                // write
-                code.push(Opcodes.i32_store_8);
-                code.push(...[0x00, 0x00]); // align and offset
+                if (statement.name === "setpixel") {
+                    // compute and cache the setpixel parameters
+                    emitExpression(statement.args[0]);
+                    code.push(Opcodes.set_local);
+                    code.push(...encoding_1.unsignedLEB128(localIndexForSymbol("x")));
+                    emitExpression(statement.args[1]);
+                    code.push(Opcodes.set_local);
+                    code.push(...encoding_1.unsignedLEB128(localIndexForSymbol("y")));
+                    emitExpression(statement.args[2]);
+                    code.push(Opcodes.set_local);
+                    code.push(...encoding_1.unsignedLEB128(localIndexForSymbol("color")));
+                    // compute the offset (x * 100) + y
+                    code.push(Opcodes.get_local);
+                    code.push(...encoding_1.unsignedLEB128(localIndexForSymbol("y")));
+                    code.push(Opcodes.f32_const);
+                    code.push(...encoding_1.ieee754(100));
+                    code.push(Opcodes.f32_mul);
+                    code.push(Opcodes.get_local);
+                    code.push(...encoding_1.unsignedLEB128(localIndexForSymbol("x")));
+                    code.push(Opcodes.f32_add);
+                    // convert to an integer
+                    code.push(Opcodes.i32_trunc_f32_s);
+                    // fetch the color
+                    code.push(Opcodes.get_local);
+                    code.push(...encoding_1.unsignedLEB128(localIndexForSymbol("color")));
+                    code.push(Opcodes.i32_trunc_f32_s);
+                    // write
+                    code.push(Opcodes.i32_store_8);
+                    code.push(...[0x00, 0x00]); // align and offset
+                }
+                else {
+                    statement.args.forEach(arg => {
+                        emitExpression(arg);
+                    });
+                    const index = program.findIndex(f => f.name === statement.name);
+                    code.push(Opcodes.call);
+                    code.push(...encoding_1.unsignedLEB128(index + 1));
+                }
                 break;
         }
     });
     emitStatements(node.statements);
-    return { code, localCount: symbols.size };
+    const localCount = symbols.size;
+    const locals = localCount > 0 ? [encodeLocal(localCount, Valtype.f32)] : [];
+    return encodeVector([...encodeVector(locals), ...code, Opcodes.end]);
 };
 exports.emitter = (ast) => {
     // Function types are vectors of parameters and return types. Currently
     // WebAssembly only supports single return values
-    const voidVoidType = [functionType, emptyArray, emptyArray];
-    const floatVoidType = [
+    const printFunctionType = [
         functionType,
         ...encodeVector([Valtype.f32]),
         emptyArray
     ];
+    // TODO: optimise - some of the procs might have the same type signature
+    const funcTypes = ast.map(proc => [
+        functionType,
+        ...encodeVector(proc.args.map(_ => Valtype.f32)),
+        emptyArray
+    ]);
     // the type section is a vector of function types
-    const typeSection = createSection(Section.type, encodeVector([voidVoidType, floatVoidType]));
+    const typeSection = createSection(Section.type, encodeVector([printFunctionType, ...funcTypes]));
     // the function section is a vector of type indices that indicate the type of each function
     // in the code section
-    const funcSection = createSection(Section.func, encodeVector([0x00 /* type index */]));
+    const funcSection = createSection(Section.func, encodeVector(ast.map((_, index) => index + 1 /* type index */)));
     // the import section is a vector of imported functions
     const printFunctionImport = [
         ...encoding_1.encodeString("env"),
         ...encoding_1.encodeString("print"),
         ExportType.func,
-        0x01 // type index
+        0x00 // type index
     ];
     const memoryImport = [
         ...encoding_1.encodeString("env"),
@@ -2416,18 +2433,14 @@ exports.emitter = (ast) => {
     const importSection = createSection(Section.import, encodeVector([printFunctionImport, memoryImport]));
     // the export section is a vector of exported functions
     const exportSection = createSection(Section.export, encodeVector([
-        [...encoding_1.encodeString("run"), ExportType.func, 0x01 /* function index */]
+        [
+            ...encoding_1.encodeString("run"),
+            ExportType.func,
+            ast.findIndex(a => a.name === "main") + 1
+        ]
     ]));
     // the code section contains vectors of functions
-    const main = ast.find(f => f.name === "main");
-    const { code, localCount } = codeFromProc(main);
-    const locals = localCount > 0 ? [encodeLocal(localCount, Valtype.f32)] : [];
-    const functionBody = encodeVector([
-        ...encodeVector(locals),
-        ...code,
-        Opcodes.end
-    ]);
-    const codeSection = createSection(Section.code, encodeVector([functionBody]));
+    const codeSection = createSection(Section.code, encodeVector(ast.map(a => codeFromProc(a, ast))));
     return Uint8Array.from([
         ...magicModuleHeader,
         ...moduleVersion,
