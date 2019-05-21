@@ -199,6 +199,8 @@ export const parse: Parser = tokens => {
           return parseWhileStatement();
         case "if":
           return parseIfStatement();
+        case "proc":
+          return parseProcStatement();
         default:
           throw new ParserError(
             `Unknown keyword ${currentToken.value}`,
@@ -215,9 +217,9 @@ export const parse: Parser = tokens => {
   };
   
 
-  const nodes: ProcStatementNode[] = [];
+  const nodes: StatementNode[] = [];
   while (currentToken) {
-    nodes.push(parseProcStatement());
+    nodes.push(parseStatement());
   }
 
   return nodes;

@@ -1,11 +1,13 @@
 import { emitter } from "./emitter";
 import { tokenize } from "./tokenizer";
 import { parse } from "./parser";
+import { transformer } from "./transformer";
 
 export const compile: Compiler = src => {
   const tokens = tokenize(src);
   const ast = parse(tokens);
-  const wasm = emitter(ast);
+  const transformedAst = transformer(ast);
+  const wasm = emitter(transformedAst);
   return wasm;
 };
 

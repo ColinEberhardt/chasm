@@ -109,7 +109,7 @@ const createSection = (sectionType: Section, data: any[]) => [
   ...encodeVector(data)
 ];
 
-const codeFromProc = (node: ProcStatementNode, program: Program) => {
+const codeFromProc = (node: ProcStatementNode, program: TransformedProgram) => {
   const code: number[] = [];
 
   const symbols = new Map<string, number>(
@@ -269,7 +269,7 @@ const codeFromProc = (node: ProcStatementNode, program: Program) => {
   return encodeVector([...encodeVector(locals), ...code, Opcodes.end]);
 };
 
-export const emitter: Emitter = (ast: Program) => {
+export const emitter: Emitter = (ast: TransformedProgram) => {
   // Function types are vectors of parameters and return types. Currently
   // WebAssembly only supports single return values
   const printFunctionType = [

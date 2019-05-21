@@ -1,5 +1,6 @@
 import { tokenize } from "./tokenizer";
 import { parse } from "./parser";
+import { transformer } from "./transformer";
 
 const applyOperator = (operator: string, left: number, right: number) => {
   switch (operator) {
@@ -26,7 +27,7 @@ const applyOperator = (operator: string, left: number, right: number) => {
 const executeProc = (
   node: ProcStatementNode,
   env: Environment,
-  program: Program,
+  program: TransformedProgram,
   args: number[] = []
 ) => {
   const symbols = new Map(
@@ -100,8 +101,9 @@ const executeProc = (
 export const runtime: Runtime = async (src, env) => () => {
   const tokens = tokenize(src);
   const program = parse(tokens);
+  const transformedProgram = transformer(program);
 
-  const main = program.find(f => f.name === "main");
+  const main = transformedProgram.find(f => f.name === "main");
 
-  executeProc(main, env, program);
+  executeProc(main, env, transformedProgram);
 };

@@ -2136,10 +2136,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const emitter_1 = require("./emitter");
 const tokenizer_1 = require("./tokenizer");
 const parser_1 = require("./parser");
+const transformer_1 = require("./transformer");
 exports.compile = src => {
     const tokens = tokenizer_1.tokenize(src);
     const ast = parser_1.parse(tokens);
-    const wasm = emitter_1.emitter(ast);
+    const transformedAst = transformer_1.transformer(ast);
+    const wasm = emitter_1.emitter(transformedAst);
     return wasm;
 };
 exports.runtime = async (src, env) => {
@@ -2154,7 +2156,7 @@ exports.runtime = async (src, env) => {
     };
 };
 
-},{"./emitter":6,"./parser":9,"./tokenizer":10}],6:[function(require,module,exports){
+},{"./emitter":6,"./parser":9,"./tokenizer":10,"./transformer":11}],6:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const encoding_1 = require("./encoding");
@@ -2452,7 +2454,7 @@ exports.emitter = (ast) => {
     ]);
 };
 
-},{"./encoding":7,"./traverse":11}],7:[function(require,module,exports){
+},{"./encoding":7,"./traverse":12}],7:[function(require,module,exports){
 (function (Buffer){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
@@ -2500,6 +2502,7 @@ exports.unsignedLEB128 = (n) => {
 Object.defineProperty(exports, "__esModule", { value: true });
 const tokenizer_1 = require("./tokenizer");
 const parser_1 = require("./parser");
+const transformer_1 = require("./transformer");
 const applyOperator = (operator, left, right) => {
     switch (operator) {
         case "+":
@@ -2580,11 +2583,12 @@ const executeProc = (node, env, program, args = []) => {
 exports.runtime = async (src, env) => () => {
     const tokens = tokenizer_1.tokenize(src);
     const program = parser_1.parse(tokens);
-    const main = program.find(f => f.name === "main");
-    executeProc(main, env, program);
+    const transformedProgram = transformer_1.transformer(program);
+    const main = transformedProgram.find(f => f.name === "main");
+    executeProc(main, env, transformedProgram);
 };
 
-},{"./parser":9,"./tokenizer":10}],9:[function(require,module,exports){
+},{"./parser":9,"./tokenizer":10,"./transformer":11}],9:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 class ParserError extends Error {
@@ -2750,6 +2754,8 @@ exports.parse = tokens => {
                     return parseWhileStatement();
                 case "if":
                     return parseIfStatement();
+                case "proc":
+                    return parseProcStatement();
                 default:
                     throw new ParserError(`Unknown keyword ${currentToken.value}`, currentToken);
             }
@@ -2765,7 +2771,7 @@ exports.parse = tokens => {
     };
     const nodes = [];
     while (currentToken) {
-        nodes.push(parseProcStatement());
+        nodes.push(parseStatement());
     }
     return nodes;
 };
@@ -2836,6 +2842,24 @@ exports.tokenize = input => {
 };
 
 },{}],11:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.transformer = (ast) => {
+    // collect up statements outside of procs
+    const freeStatements = ast.filter(a => a.type !== "procStatement");
+    if (freeStatements.length > 0) {
+        const mainProc = {
+            type: "procStatement",
+            name: "main",
+            args: [],
+            statements: freeStatements
+        };
+        ast = [mainProc, ...ast.filter(a => a.type === "procStatement")];
+    }
+    return ast.map(a => a);
+};
+
+},{}],12:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 // post order ast walker
