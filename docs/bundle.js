@@ -2845,9 +2845,10 @@ exports.tokenize = input => {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.transformer = (ast) => {
-    // collect up statements outside of procs
-    const freeStatements = ast.filter(a => a.type !== "procStatement");
-    if (freeStatements.length > 0) {
+    // do we have a main proc?
+    if (!ast.find(a => a.type === "procStatement" && a.name === "main")) {
+        // if not - collect up any 'free' statements and add one.
+        const freeStatements = ast.filter(a => a.type !== "procStatement");
         const mainProc = {
             type: "procStatement",
             name: "main",
