@@ -50,11 +50,6 @@ interface BinaryExpressionNode extends ProgramNode {
   operator: Operator;
 }
 
-interface IdentifierNode extends ProgramNode {
-  type: "identifier";
-  value: string;
-}
-
 interface PrintStatementNode extends ProgramNode {
   type: "printStatement";
   expression: ExpressionNode;
