@@ -16,7 +16,7 @@ export const signedLEB128 = (n: number) => {
   const bitCount = Math.ceil(Math.log2(Math.abs(n))) + 1;
   while (more) {
     let byte = n & 0x7f;
-    n >>>= 7;
+    n >>= 7;
     if (isNegative) {
       n = n | -(1 << (bitCount - 8));
     }
