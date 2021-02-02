@@ -20,7 +20,7 @@ export const signedLEB128 = (n: number) => {
     if (isNegative) {
       n = n | -(1 << (bitCount - 8));
     }
-    if ((n === 0 && (byte & 0x40) === 0) || (n === -1 && (byte & 0x40) !== 0)) {
+    if ((n === 0 && (byte & 0x40) === 0) || (n === -1 && (byte & 0x40) !== 0x40)) {
       more = false;
     } else {
       byte |= 0x80;
